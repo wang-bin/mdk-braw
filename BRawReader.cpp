@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
+ * braw plugin for libmdk
+ */
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
 #include "mdk/VideoFrame.h"
@@ -10,9 +14,9 @@
 #elif (__linux__ + 0)
 # define BSTR const char*
 #endif
+#include <algorithm>
 #include <atomic>
 #include <iostream>
-#include <thread>
 
 using namespace std;
 using namespace Microsoft::WRL; //ComPtr
@@ -36,7 +40,7 @@ public:
     BRawReader();
     ~BRawReader() override = default;
     const char* name() const override { return "BRAW"; }
-
+    bool isSupported(const std::string& url, MediaType type) const override;
     void setTimeout(int64_t value, TimeoutCallback cb) override {}
     bool load() override;
     bool unload() override;
@@ -77,7 +81,6 @@ private:
     int64_t duration_ = 0;
     int64_t frames_ = 0;
     atomic<uint64_t> index_ = 0;
-    thread thread_;
 };
 
 void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip, IBlackmagicRawMetadataIterator* i)
@@ -168,6 +171,20 @@ _Pragma("weak CreateBlackmagicRawFactoryInstance")
         clog << "BlackmagicRawAPI is not available!" << endl;
         return;
     }
+}
+
+bool BRawReader::isSupported(const std::string& url, MediaType type) const
+{
+    if (url.empty())
+        return true;
+    auto dot = url.rfind('.');
+    if (dot == string::npos)
+        return true;
+    string s = url.substr(dot + 1);
+    transform(s.begin(), s.end(), s.begin(), [](char c){
+        return std::tolower(c);
+    });
+    return s == "braw";
 }
 
 bool BRawReader::load()
