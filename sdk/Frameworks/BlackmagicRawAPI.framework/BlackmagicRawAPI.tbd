@@ -1,0 +1,19 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+uuids:
+  - target:          x86_64-macos
+    value:           9F553A90-1BF7-3D26-9A19-2ABC491B6501
+  - target:          arm64-macos
+    value:           159B0FBF-5A2C-3DF2-B938-E7217F82DC28
+flags:           [ not_app_extension_safe ]
+install-name:    '@rpath/BlackmagicRawAPI.framework/Versions/A/BlackmagicRawAPI'
+current-version: 2.6
+compatibility-version: 2.6
+exports:
+  - targets:         [ x86_64-macos, arm64-macos ]
+    symbols:         [ _CreateBlackmagicRawFactoryInstance, _SafeArrayAccessData, 
+                       _SafeArrayCreate, _SafeArrayDestroy, _SafeArrayGetLBound, 
+                       _SafeArrayGetUBound, _SafeArrayGetVartype, _SafeArrayUnaccessData, 
+                       _VariantClear, _VariantInit ]
+...
