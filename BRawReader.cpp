@@ -45,7 +45,6 @@ public:
     bool load() override;
     bool unload() override;
     void stop() override;
-    bool pause(bool value = true) override;
     bool seek(int64_t msec, SeekFlag flag = SeekFlag::Default, function<void(int64_t)> cb = nullptr) override;
     int64_t buffered(int64_t* bytes = nullptr, float* percent = nullptr) const override;
 
@@ -53,23 +52,15 @@ public:
     void ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlackmagicRawFrame* frame) override;
     void ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBlackmagicRawProcessedImage* processedImage) override;
     void DecodeComplete(IBlackmagicRawJob*, HRESULT) override {}
-	void TrimProgress(IBlackmagicRawJob*, float) override {}
-	void TrimComplete(IBlackmagicRawJob*, HRESULT) override {}
-	void SidecarMetadataParseWarning(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
-	void SidecarMetadataParseError(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
-	void PreparePipelineComplete(void*, HRESULT) override {}
-
-	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override {
-		return E_NOTIMPL;
-	}
-
-	ULONG STDMETHODCALLTYPE AddRef(void) override {
-		return 0;
-	}
-
-	ULONG STDMETHODCALLTYPE Release(void) override {
-		return 0;
-	}
+    void TrimProgress(IBlackmagicRawJob*, float) override {}
+    void TrimComplete(IBlackmagicRawJob*, HRESULT) override {}
+    void SidecarMetadataParseWarning(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
+    void SidecarMetadataParseError(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
+    void PreparePipelineComplete(void*, HRESULT) override {}
+    // IUnknown
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
+    ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
+    ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
 private:
     struct UserData {
         uint64_t index;
@@ -208,7 +199,8 @@ bool BRawReader::load()
     update(MediaStatus::Loaded);
 
     MS_ENSURE(codec_->SetCallback(this), false);
-    update(State::Running);
+    if (state() == State::Stopped) // start with pause
+        update(State::Running);
 
     IBlackmagicRawJob* job = nullptr;
     MS_ENSURE(clip_->CreateJobReadFrame(index_, &job), false);
@@ -233,12 +225,6 @@ void BRawReader::stop()
     update(State::Stopped);
 }
 
-bool BRawReader::pause(bool value)
-{
-    update(value ? State::Paused : State::Running);
-    return false;
-}
-
 bool BRawReader::seek(int64_t msec, SeekFlag flag, std::function<void(int64_t)> cb)
 {
     return false;
@@ -260,8 +246,8 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
         delete data;
     }
     MS_ENSURE(result);// TODO: stop?
-	MS_ENSURE(frame->SetResourceFormat(blackmagicRawResourceFormatRGBAU8));
-	IBlackmagicRawJob* decodeAndProcessJob = nullptr; // NOT ComPtr!
+    MS_ENSURE(frame->SetResourceFormat(blackmagicRawResourceFormatRGBAU8));
+    IBlackmagicRawJob* decodeAndProcessJob = nullptr; // NOT ComPtr!
     MS_ENSURE(frame->CreateJobDecodeAndProcessFrame(nullptr, nullptr, &decodeAndProcessJob));
     job = decodeAndProcessJob;
     data = new UserData();
@@ -285,15 +271,15 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         delete data;
     }
     MS_ENSURE(result);// TODO: stop?
-	unsigned int width = 0;
-	unsigned int height = 0;
-	unsigned int sizeBytes = 0;
-	uint8_t const* imageData[1] = {};
+    unsigned int width = 0;
+    unsigned int height = 0;
+    unsigned int sizeBytes = 0;
+    uint8_t const* imageData[1] = {};
     BlackmagicRawResourceFormat f;
-	MS_ENSURE(processedImage->GetWidth(&width));
-	MS_ENSURE(processedImage->GetHeight(&height));
+    MS_ENSURE(processedImage->GetWidth(&width));
+    MS_ENSURE(processedImage->GetHeight(&height));
     MS_ENSURE(processedImage->GetResourceSizeBytes(&sizeBytes));
-	MS_ENSURE(processedImage->GetResource((void**)imageData));
+    MS_ENSURE(processedImage->GetResource((void**)imageData));
     MS_ENSURE(processedImage->GetResourceFormat(&f));
     BlackmagicRawResourceType type;
     MS_ENSURE(processedImage->GetResourceType(&type));
