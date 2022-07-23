@@ -45,7 +45,7 @@ public:
     bool load() override;
     bool unload() override;
     void stop() override;
-    bool seek(int64_t msec, SeekFlag flag = SeekFlag::Default, function<void(int64_t)> cb = nullptr) override;
+    bool seekTo(int64_t msec, SeekFlag flag, int id) override;
     int64_t buffered(int64_t* bytes = nullptr, float* percent = nullptr) const override;
 
     // IBlackmagicRawCallback
@@ -61,9 +61,14 @@ public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
     ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
     ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
+protected:
+    bool shouldPause(MediaType type, int track) const override { return seeking_ == 0 && state() == State::Paused;}
 private:
+    bool readAt(uint64_t index);
     struct UserData {
-        uint64_t index;
+        uint64_t index = 0;
+        int seekId = 0;
+        bool seekWaitFrame = true;
     };
 
     ComPtr<IBlackmagicRawFactory> factory_;
@@ -71,7 +76,7 @@ private:
     ComPtr<IBlackmagicRawClip> clip_;
     int64_t duration_ = 0;
     int64_t frames_ = 0;
-    atomic<uint64_t> index_ = 0;
+    atomic<int> seeking_ = 0;
 };
 
 void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip, IBlackmagicRawMetadataIterator* i)
@@ -202,12 +207,8 @@ bool BRawReader::load()
     if (state() == State::Stopped) // start with pause
         update(State::Running);
 
-    IBlackmagicRawJob* job = nullptr;
-    MS_ENSURE(clip_->CreateJobReadFrame(index_, &job), false);
-    auto data = new UserData();
-    data->index = index_;
-    job->SetUserData(data);
-    MS_ENSURE(job->Submit(), false); // FIXME: user data leak
+    if (!readAt(0))
+        return false;
 
     return true;
 }
@@ -225,9 +226,22 @@ void BRawReader::stop()
     update(State::Stopped);
 }
 
-bool BRawReader::seek(int64_t msec, SeekFlag flag, std::function<void(int64_t)> cb)
+bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
 {
-    return false;
+    // TODO: cancel running decodeProcessJob
+    // TODO: seekCompelete if error later
+    auto index = std::min<uint64_t>((frames_ - 1) * msec / duration_, frames_ - 1);
+    seeking_++;
+    clog << seeking_ << " Seek to index: " << index << endl;
+    IBlackmagicRawJob* job = nullptr;
+    MS_ENSURE(clip_->CreateJobReadFrame(index, &job), false);
+    auto data = new UserData();
+    data->index = index;
+    data->seekId = id;
+    data->seekWaitFrame = !test_flag(flag & SeekFlag::IOCompleteCallback);
+    job->SetUserData(data);
+    MS_ENSURE(job->Submit(), false); // FIXME: user data leak
+    return true;
 }
 
 int64_t BRawReader::buffered(int64_t* bytes, float* percent) const
@@ -240,10 +254,18 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
     ComPtr<IBlackmagicRawJob> job;
     job.Attach(readJob);
     uint64_t index = 0;
+    int seekId = 0;
+    bool seekWaitFrame = true;
     UserData* data = nullptr;
     if (SUCCEEDED(readJob->GetUserData((void**)&data)) && data) {
         index = data->index;
+        seekId = data->seekId;
+        seekWaitFrame = data->seekWaitFrame;
         delete data;
+    }
+    if (seekId > 0 && !seekWaitFrame) {
+        seeking_--;
+        seekComplete(duration_ * index / frames_, seekId);
     }
     MS_ENSURE(result);// TODO: stop?
     MS_ENSURE(frame->SetResourceFormat(blackmagicRawResourceFormatRGBAU8));
@@ -252,24 +274,39 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
     job = decodeAndProcessJob;
     data = new UserData();
     data->index = index;
+    data->seekId = seekId;
+    data->seekWaitFrame = seekWaitFrame;
     decodeAndProcessJob->SetUserData(data);
     // will wait until submitted to gpu if using gpu decoder
     MS_ENSURE(decodeAndProcessJob->Submit());  // FIXME: user data leak
-    //readJob->Release();
-    // read the next frame.
 }
 
 void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBlackmagicRawProcessedImage* processedImage)
-
 {
     ComPtr<IBlackmagicRawJob> job;
     job.Attach(procJob);
     uint64_t index = 0;
+    int seekId = 0;
+    bool seekWaitFrame = true;
     UserData* data = nullptr;
     if (SUCCEEDED(procJob->GetUserData((void**)&data)) && data) {
         index = data->index;
+        seekId = data->seekId;
+        seekWaitFrame = data->seekWaitFrame;
         delete data;
     }
+    if (seekId > 0 && seekWaitFrame) {
+        seeking_--;
+        if (seeking_ > 0 && seekId == 0) {
+            seekComplete(duration_ * index / frames_, seekId); // may create a new seek
+            clog << "ProcessComplete drop @" << index << endl;
+            return;
+        }
+        seekComplete(duration_ * index / frames_, seekId); // may create a new seek
+    }
+    if (seeking_ == 0) // new seek created by seekComplete
+        readAt(index + 1); // before frameAvailable() to drop when seeking
+
     MS_ENSURE(result);// TODO: stop?
     unsigned int width = 0;
     unsigned int height = 0;
@@ -288,32 +325,36 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     frame.setBuffers(imageData);
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
     frame.setDuration((double)duration_/(double)frames_);
+
+    if (seekId > 0) {
+        frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
+    }
     frameAvailable(frame);
     // TODO: EOS frame
     if (index == frames_ - 1) {
         frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
         return;
     }
+}
+
+bool BRawReader::readAt(uint64_t index)
+{
     IBlackmagicRawJob* nextJob = nullptr;
-    MS_ENSURE(clip_->CreateJobReadFrame(++index_, &nextJob));
-    data = new UserData();
-    data->index = index_;
+    MS_ENSURE(clip_->CreateJobReadFrame(index, &nextJob), false);
+    auto data = new UserData();
+    data->index = index;
     nextJob->SetUserData(data);
-    MS_ENSURE(nextJob->Submit());  // FIXME: user data leak
+    MS_ENSURE(nextJob->Submit(), false);  // FIXME: user data leak
+    return true;
 }
 
 
 void register_framereader_braw() {
     FrameReader::registerOnce("braw", []{return new BRawReader();});
 }
-namespace { // DCE
-static const struct register_at_load_time_if_no_dce {
-    inline register_at_load_time_if_no_dce() { register_framereader_braw();}
-} s;
-}
 MDK_NS_END
 
-MDK_API int mdk_plugin_load() {
+extern "C" MDK_API int mdk_plugin_load() {
     using namespace MDK_NS;
     register_framereader_braw();
     return abiVersion();
