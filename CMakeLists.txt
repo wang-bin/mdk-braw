@@ -38,6 +38,7 @@ if(APPLE)
 endif()
 add_library(${PROJECT_NAME} MODULE
     BRawReader.cpp
+    BRawAPILoader.cpp
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -56,6 +57,10 @@ if(APPLE)
     "-framework CoreFoundation"
     -F${CMAKE_CURRENT_SOURCE_DIR}/sdk/Frameworks "-weak_framework BlackmagicRawAPI")
   # set rpath
+elseif(WIN32)
+  target_link_libraries(${PROJECT_NAME} PRIVATE comsuppw) # _bstr_t
+else()
+  target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 endif()
 
 
@@ -80,6 +85,13 @@ function(setup_mdk_plugin tgt)
       #COMMAND install_name_tool -change $<TARGET_FILE:${CMAKE_PROJECT_NAME}> @rpath/$<TARGET_SONAME_FILE_NAME:${CMAKE_PROJECT_NAME}> $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/$<TARGET_LINKER_FILE_NAME:${tgt}>
       )
     endif()
+  else()
+    install(TARGETS ${tgt}
+      RUNTIME DESTINATION bin
+      LIBRARY DESTINATION $<IF:$<BOOL:${WIN32}>,bin,lib>
+      ARCHIVE DESTINATION lib
+      FRAMEWORK DESTINATION lib
+      )
   endif()
 endfunction(setup_mdk_plugin)
 
