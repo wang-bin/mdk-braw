@@ -77,6 +77,7 @@ private:
     int64_t duration_ = 0;
     int64_t frames_ = 0;
     atomic<int> seeking_ = 0;
+    atomic<uint64_t> index_ = 0; // for stepping frame forward/backward
 };
 
 void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip, IBlackmagicRawMetadataIterator* i)
@@ -230,7 +231,10 @@ bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
 {
     // TODO: cancel running decodeProcessJob
     // TODO: seekCompelete if error later
-    auto index = std::min<uint64_t>((frames_ - 1) * msec / duration_, frames_ - 1);
+    auto index = std::min<uint64_t>((frames_ - 1) * msec / duration_, frames_ - 1);;
+    if (test_flag(flag, SeekFlag::FromNow|SeekFlag::Frame)) {
+        index = clamp<uint64_t>(index_ + msec, 0, frames_ - 1);
+    }
     seeking_++;
     clog << seeking_ << " Seek to index: " << index << endl;
     IBlackmagicRawJob* job = nullptr;
@@ -304,8 +308,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         }
         seekComplete(duration_ * index / frames_, seekId); // may create a new seek
     }
-    if (seeking_ == 0) // new seek created by seekComplete
-        readAt(index + 1); // before frameAvailable() to drop when seeking
+    index_ = index;
 
     MS_ENSURE(result);// TODO: stop?
     unsigned int width = 0;
@@ -330,6 +333,11 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
     }
     frameAvailable(frame);
+
+    // frameAvailable() will wait in pause state, and return when seeking, do not read the next index
+    if (seeking_ == 0 && state() != State::Paused) // seeking_ > 0: new seek created by seekComplete when continuously seeking
+        readAt(index + 1);
+
     // TODO: EOS frame
     if (index == frames_ - 1) {
         frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
