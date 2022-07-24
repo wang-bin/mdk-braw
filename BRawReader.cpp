@@ -8,19 +8,13 @@
 #include "mdk/AudioFrame.h"
 #include "BlackmagicRawAPI.h"
 #include "ComPtr.h"
-#if (__APPLE__ + 0)
-# define BSTR CFStringRef
-# include "cfptr.h"
-#elif (__linux__ + 0)
-# define BSTR const char*
-#endif
+#include "BStr.h"
 #include <algorithm>
 #include <atomic>
 #include <iostream>
 
 using namespace std;
 using namespace Microsoft::WRL; //ComPtr
-using namespace apple;
 
 #define MS_ENSURE(f, ...) MS_CHECK(f, return __VA_ARGS__;)
 #define MS_WARN(f) MS_CHECK(f)
@@ -51,17 +45,15 @@ public:
     void ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlackmagicRawFrame* frame) override;
     void ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBlackmagicRawProcessedImage* processedImage) override;
     void DecodeComplete(IBlackmagicRawJob*, HRESULT) override {}
-    void TrimProgress(IBlackmagicRawJob*, float) override {}
+    void TrimProgress(IBlackmagicRawJob*, float info) override {}
     void TrimComplete(IBlackmagicRawJob*, HRESULT) override {}
-    void SidecarMetadataParseWarning(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
-    void SidecarMetadataParseError(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
+    void SidecarMetadataParseWarning(IBlackmagicRawClip*, BRawStr fileName, uint32_t lineNumber, BRawStr info) override {}
+    void SidecarMetadataParseError(IBlackmagicRawClip*, BRawStr fileName, uint32_t lineNumber, BRawStr info) override {}
     void PreparePipelineComplete(void*, HRESULT) override {}
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
     ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
     ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
-protected:
-    bool shouldPause(MediaType type, int track) const override { return seeking_ == 0 && state() == State::Paused;}
 private:
     bool readAt(uint64_t index);
     struct UserData {
@@ -189,8 +181,8 @@ bool BRawReader::load()
         return false;
     MS_ENSURE(factory_->CreateCodec(&codec_), false);
     // TODO: bstr_ptr
-    cfptr<CFStringRef> file = CFStringCreateWithCString(nullptr, url().data(), kCFStringEncodingUTF8);
-    MS_ENSURE(codec_->OpenClip(file, &clip_), false);
+    BStr file(url().data());
+    MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
 
     ComPtr<IBlackmagicRawMetadataIterator> mdit;
     MS_ENSURE(clip_->GetMetadataIterator(&mdit), false);
