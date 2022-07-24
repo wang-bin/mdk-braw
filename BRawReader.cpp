@@ -44,7 +44,6 @@ public:
     void setTimeout(int64_t value, TimeoutCallback cb) override {}
     bool load() override;
     bool unload() override;
-    void stop() override;
     bool seekTo(int64_t msec, SeekFlag flag, int id) override;
     int64_t buffered(int64_t* bytes = nullptr, float* percent = nullptr) const override;
 
@@ -216,19 +215,23 @@ bool BRawReader::load()
 
 bool BRawReader::unload()
 {
-    //codec->FlushJobs();
-    // TODO: job->Abort()
+    update(MediaStatus::Unloaded);
+    update(State::Stopped);
+    if (!codec_)
+        return false;
+    // TODO: job->Abort();
+    codec_->FlushJobs(); // must wait all jobs to safe release
+    codec_.Reset();
+    clip_.Reset();
+
     frames_ = 0;
     return true;
 }
 
-void BRawReader::stop()
-{
-    update(State::Stopped);
-}
-
 bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
 {
+    if (!clip_)
+        return false;
     // TODO: cancel running decodeProcessJob
     // TODO: seekCompelete if error later
     auto index = std::min<uint64_t>((frames_ - 1) * msec / duration_, frames_ - 1);;
@@ -334,19 +337,20 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     }
     frameAvailable(frame);
 
-    // frameAvailable() will wait in pause state, and return when seeking, do not read the next index
-    if (seeking_ == 0 && state() != State::Paused) // seeking_ > 0: new seek created by seekComplete when continuously seeking
-        readAt(index + 1);
-
-    // TODO: EOS frame
     if (index == frames_ - 1) {
+        update(MediaStatus::Loaded|MediaStatus::End); // Options::ContinueAtEnd
         frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
         return;
     }
+    // frameAvailable() will wait in pause state, and return when seeking, do not read the next index
+    if (seeking_ == 0 && state() == State::Running && test_flag(mediaStatus() & MediaStatus::Loaded)) // seeking_ > 0: new seek created by seekComplete when continuously seeking
+        readAt(index + 1);
 }
 
 bool BRawReader::readAt(uint64_t index)
 {
+    if (!clip_)
+        return false;
     IBlackmagicRawJob* nextJob = nullptr;
     MS_ENSURE(clip_->CreateJobReadFrame(index, &nextJob), false);
     auto data = new UserData();
