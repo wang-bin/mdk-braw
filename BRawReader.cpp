@@ -195,6 +195,8 @@ bool BRawReader::load()
 
     update(MediaStatus::Loaded);
 
+    updateBufferingProgress(0);
+
     MS_ENSURE(codec_->SetCallback(this), false);
     if (state() == State::Stopped) // start with pause
         update(State::Running);
@@ -232,6 +234,7 @@ bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
     }
     seeking_++;
     clog << seeking_ << " Seek to index: " << index << endl;
+    updateBufferingProgress(0);
     IBlackmagicRawJob* job = nullptr;
     MS_ENSURE(clip_->CreateJobReadFrame(index, &job), false);
     auto data = new UserData();
@@ -250,6 +253,7 @@ int64_t BRawReader::buffered(int64_t* bytes, float* percent) const
 
 void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlackmagicRawFrame* frame)
 { // immediately called
+    updateBufferingProgress(100);
     ComPtr<IBlackmagicRawJob> job;
     job.Attach(readJob);
     uint64_t index = 0;
