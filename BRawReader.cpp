@@ -210,15 +210,16 @@ bool BRawReader::load()
 bool BRawReader::unload()
 {
     update(MediaStatus::Unloaded);
-    update(State::Stopped);
-    if (!codec_)
+    if (!codec_) {
+        update(State::Stopped);
         return false;
+    }
     // TODO: job->Abort();
     codec_->FlushJobs(); // must wait all jobs to safe release
     codec_.Reset();
     clip_.Reset();
-
     frames_ = 0;
+    update(State::Stopped);
     return true;
 }
 
@@ -345,6 +346,8 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
 
 bool BRawReader::readAt(uint64_t index)
 {
+    if (!test_flag(mediaStatus(), MediaStatus::Loaded))
+        return false;
     if (!clip_)
         return false;
     IBlackmagicRawJob* nextJob = nullptr;
