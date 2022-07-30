@@ -187,6 +187,11 @@ bool BRawReader::load()
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
     MS_ENSURE(codec_->SetCallback(this), false);
 
+    MediaEvent e{};
+    e.category = "decoder.video";
+    e.detail = "braw";
+    dispatchEvent(e);
+
     ComPtr<IBlackmagicRawMetadataIterator> mdit;
     MS_ENSURE(clip_->GetMetadataIterator(&mdit), false);
     MediaInfo info;
@@ -203,12 +208,7 @@ bool BRawReader::load()
     if (state() == State::Stopped) // start with pause
         update(State::Running);
 
-    MediaEvent e{};
-    e.category = "decoder.video";
-    e.detail = "braw";
-    dispatchEvent(e);
-
-    if (!readAt(0))
+    if (seeking_ == 0 && !readAt(0)) // prepare(pos) will seek in changed(MediaInfo)
         return false;
 
     return true;
@@ -236,6 +236,8 @@ bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
         return false;
     // TODO: cancel running decodeProcessJob
     // TODO: seekCompelete if error later
+    if (msec > duration_) // msec can be INT64_MAX, avoid overflow
+        msec = duration_;
     auto index = std::min<uint64_t>((frames_ - 1) * msec / duration_, frames_ - 1);;
     if (test_flag(flag, SeekFlag::FromNow|SeekFlag::Frame)) {
         if (msec == 0) {
@@ -350,7 +352,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     }
     frameAvailable(frame);
 
-    if (index == frames_ - 1) {
+    if (index == frames_ - 1 && seeking_ == 0) {
         frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
         if (!test_flag(options() & Options::ContinueAtEnd)) {
             thread([=]{ unload(); }).detach(); // unload() in current thread will result in dead lock
