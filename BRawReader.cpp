@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <iostream>
+#include <thread>
 
 using namespace std;
 using namespace Microsoft::WRL; //ComPtr
@@ -282,6 +283,11 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
         seekComplete(duration_ * index / frames_, seekId);
     }
     MS_ENSURE(result);// TODO: stop?
+
+    if (index == frames_ - 1) {
+        update(MediaStatus::Loaded|MediaStatus::End); // Options::ContinueAtEnd
+    }
+
     MS_ENSURE(frame->SetResourceFormat(blackmagicRawResourceFormatRGBAU8));
     IBlackmagicRawJob* decodeAndProcessJob = nullptr; // NOT ComPtr!
     MS_ENSURE(frame->CreateJobDecodeAndProcessFrame(nullptr, nullptr, &decodeAndProcessJob));
@@ -345,8 +351,10 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     frameAvailable(frame);
 
     if (index == frames_ - 1) {
-        update(MediaStatus::Loaded|MediaStatus::End); // Options::ContinueAtEnd
         frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
+        if (!test_flag(options() & Options::ContinueAtEnd)) {
+            thread([=]{ unload(); }).detach(); // unload() in current thread will result in dead lock
+        }
         return;
     }
     // frameAvailable() will wait in pause state, and return when seeking, do not read the next index
