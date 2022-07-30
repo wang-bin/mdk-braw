@@ -15,6 +15,7 @@
 
 using namespace std;
 using namespace Microsoft::WRL; //ComPtr
+// GPU: CreatePipeline/DeviceIterator
 
 #define MS_ENSURE(f, ...) MS_CHECK(f, return __VA_ARGS__;)
 #define MS_WARN(f) MS_CHECK(f)
@@ -169,7 +170,7 @@ bool BRawReader::isSupported(const std::string& url, MediaType type) const
     if (dot == string::npos)
         return true;
     string s = url.substr(dot + 1);
-    transform(s.begin(), s.end(), s.begin(), [](char c){
+    transform(s.begin(), s.end(), s.begin(), [](unsigned char c){
         return std::tolower(c);
     });
     return s == "braw";
@@ -201,6 +202,11 @@ bool BRawReader::load()
     if (state() == State::Stopped) // start with pause
         update(State::Running);
 
+    MediaEvent e{};
+    e.category = "decoder.video";
+    e.detail = "braw";
+    dispatchEvent(e);
+
     if (!readAt(0))
         return false;
 
@@ -231,6 +237,10 @@ bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
     // TODO: seekCompelete if error later
     auto index = std::min<uint64_t>((frames_ - 1) * msec / duration_, frames_ - 1);;
     if (test_flag(flag, SeekFlag::FromNow|SeekFlag::Frame)) {
+        if (msec == 0) {
+            seekComplete(duration_ * index_ / frames_, id);
+            return true;
+        }
         index = clamp<uint64_t>(index_ + msec, 0, frames_ - 1);
     }
     seeking_++;
