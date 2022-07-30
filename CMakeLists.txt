@@ -22,6 +22,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(CheckLibraryExists)
 include(CheckIncludeFiles)
+find_package(Threads)
+link_libraries(Threads::Threads)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # TODO: tools.cmake
@@ -51,7 +53,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
   )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE BUILD_MDK_LIB)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_PROJECT_NAME} Threads::Threads)
 if(APPLE)
   target_link_libraries(${PROJECT_NAME} PRIVATE
     "-framework CoreFoundation"
