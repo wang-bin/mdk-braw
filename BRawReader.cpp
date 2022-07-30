@@ -185,21 +185,21 @@ bool BRawReader::load()
     // TODO: bstr_ptr
     BStr file(url().data());
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
+    MS_ENSURE(codec_->SetCallback(this), false);
 
     ComPtr<IBlackmagicRawMetadataIterator> mdit;
     MS_ENSURE(clip_->GetMetadataIterator(&mdit), false);
     MediaInfo info;
     to(info, clip_, mdit.Get());
-    changed(info);
     clog << info << endl;
     duration_ = info.video[0].duration;
     frames_ = info.video[0].frames;
 
+    changed(info); // may call seek for player.prepare(), duration_, frames_ and SetCallback() must be ready
     update(MediaStatus::Loaded);
 
     updateBufferingProgress(0);
 
-    MS_ENSURE(codec_->SetCallback(this), false);
     if (state() == State::Stopped) // start with pause
         update(State::Running);
 
