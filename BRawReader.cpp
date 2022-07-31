@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <iostream>
+#include <string_view>
 #include <thread>
 
 using namespace std;
@@ -59,6 +60,9 @@ public:
     ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
 private:
     bool readAt(uint64_t index);
+    void parseDecoderOptions();
+    void setDecoderOption(const char* key, const char* val);
+
     struct UserData {
         uint64_t index = 0;
         int seekId = 0;
@@ -218,10 +222,13 @@ bool BRawReader::load()
     e.detail = "braw";
     dispatchEvent(e);
 
+    parseDecoderOptions();
+
     ComPtr<IBlackmagicRawMetadataIterator> mdit;
     MS_ENSURE(clip_->GetMetadataIterator(&mdit), false);
     MediaInfo info;
     to(info, clip_, mdit.Get());
+    info.video[0].codec.format = format_;
     clog << info << endl;
     duration_ = info.video[0].duration;
     frames_ = info.video[0].frames;
@@ -403,6 +410,40 @@ bool BRawReader::readAt(uint64_t index)
     nextJob->SetUserData(data);
     MS_ENSURE(nextJob->Submit(), false);  // FIXME: user data leak
     return true;
+}
+
+void BRawReader::parseDecoderOptions()
+{
+    // decoder: name:key1=val1:key2=val2
+    for (const auto& i : decoders(MediaType::Video)) {
+        if (auto colon = i.find(':'); colon != string::npos) {
+            if (string_view(i).substr(0, colon) == name()) {
+                auto options = i.substr(colon + 1);
+                char* p = &options[0];
+                while (true) {
+                    char* v = strchr(p, '=');
+                    if (!v)
+                        break;
+                    *v++ = 0;
+                    char* pp = strchr(v, ':');
+                    if (pp)
+                        *pp = 0;
+                    setDecoderOption(p, v);
+                    if (!pp)
+                        break;
+                    p = pp + 1;
+                }
+            }
+            return;
+        }
+    }
+}
+
+void BRawReader::setDecoderOption(const char* key, const char* val)
+{
+    if ("format"sv == key) {
+        format_ = VideoFormat::fromName(val);
+    }
 }
 
 
