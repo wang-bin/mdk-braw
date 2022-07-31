@@ -11,6 +11,7 @@
 #include "BStr.h"
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <iostream>
 #include <thread>
 
@@ -67,6 +68,7 @@ private:
     ComPtr<IBlackmagicRawFactory> factory_;
     ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
+    PixelFormat format_ = PixelFormat::RGBA;
     int64_t duration_ = 0;
     int64_t frames_ = 0;
     atomic<int> seeking_ = 0;
@@ -133,14 +135,35 @@ PixelFormat to(BlackmagicRawResourceFormat fmt)
 {
     switch (fmt)
     {
-    case blackmagicRawResourceFormatRGBAU8: return PixelFormat::RGBA;
-    case blackmagicRawResourceFormatBGRAU8: return PixelFormat::BGRA;
-    case blackmagicRawResourceFormatRGBU16: return PixelFormat::RGB48LE;
-    case blackmagicRawResourceFormatRGBAU16: return PixelFormat::RGBA64LE;
-    case blackmagicRawResourceFormatBGRAU16: return PixelFormat::BGRA64LE;
-    //case blackmagicRawResourceFormatRGBF32: return PixelFormat::RGBF;
+    case blackmagicRawResourceFormatRGBAU8: return PixelFormat::RGBA; // "rgba"
+    case blackmagicRawResourceFormatBGRAU8: return PixelFormat::BGRA; // "bgra"
+    case blackmagicRawResourceFormatRGBU16: return PixelFormat::RGB48LE; // "rgb48le" NOT RECOMMENDED! 3 channel formats are not directly supported by gpu
+    case blackmagicRawResourceFormatRGBAU16: return PixelFormat::RGBA64LE; // "rgba64le"
+    case blackmagicRawResourceFormatBGRAU16: return PixelFormat::BGRA64LE; // "bgra64le"
+    case blackmagicRawResourceFormatRGBU16Planar: return PixelFormat::RGBP16LE; // "rgbp16le"
+    //case blackmagicRawResourceFormatRGBF32: return PixelFormat::RGBF32LE;
+    case blackmagicRawResourceFormatRGBF32Planar: return PixelFormat::RGBPF32LE; // "rgbpf32le"
+    case blackmagicRawResourceFormatBGRAF32: return PixelFormat::BGRAF32LE; // "bgraf32le"
     default:
         return PixelFormat::Unknown;
+    }
+}
+
+BlackmagicRawResourceFormat from(PixelFormat fmt)
+{
+    switch (fmt)
+    {
+    case PixelFormat::RGBA: return blackmagicRawResourceFormatRGBAU8;
+    case PixelFormat::BGRA: return blackmagicRawResourceFormatBGRAU8;
+    case PixelFormat::RGB48LE: return blackmagicRawResourceFormatRGBU16; // NOT RECOMMENDED! 3 channel formats are not directly supported by gpu
+    case PixelFormat::RGBA64LE: return blackmagicRawResourceFormatRGBAU16;
+    case PixelFormat::BGRA64LE: return blackmagicRawResourceFormatBGRAU16;
+    case PixelFormat::RGBP16LE: return blackmagicRawResourceFormatRGBU16Planar;
+    //case PixelFormat::RGBF32LE: return blackmagicRawResourceFormatRGBF32;
+    case PixelFormat::RGBPF32LE: return blackmagicRawResourceFormatRGBF32Planar;
+    case PixelFormat::BGRAF32LE: return blackmagicRawResourceFormatBGRAF32;
+    default:
+        return blackmagicRawResourceFormatRGBAU8;
     }
 }
 
@@ -160,6 +183,9 @@ _Pragma("weak CreateBlackmagicRawFactoryInstance")
     if (!factory_) {
         clog << "BlackmagicRawAPI is not available!" << endl;
         return;
+    }
+    if (auto env = std::getenv("BRAW_FORMAT"); env) {
+        format_ = VideoFormat::fromName(env);
     }
 }
 
@@ -291,7 +317,7 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
         update(MediaStatus::Loaded|MediaStatus::End); // Options::ContinueAtEnd
     }
 
-    MS_ENSURE(frame->SetResourceFormat(blackmagicRawResourceFormatRGBAU8));
+    MS_ENSURE(frame->SetResourceFormat(from(format_)));
     IBlackmagicRawJob* decodeAndProcessJob = nullptr; // NOT ComPtr!
     MS_ENSURE(frame->CreateJobDecodeAndProcessFrame(nullptr, nullptr, &decodeAndProcessJob));
     job = decodeAndProcessJob;
@@ -333,12 +359,12 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     unsigned int width = 0;
     unsigned int height = 0;
     unsigned int sizeBytes = 0;
-    uint8_t const* imageData[1] = {};
+    uint8_t const* imageData[3] = {};
     BlackmagicRawResourceFormat f;
     MS_ENSURE(processedImage->GetWidth(&width));
     MS_ENSURE(processedImage->GetHeight(&height));
     MS_ENSURE(processedImage->GetResourceSizeBytes(&sizeBytes));
-    MS_ENSURE(processedImage->GetResource((void**)imageData));
+    MS_ENSURE(processedImage->GetResource((void**)&imageData[0]));
     MS_ENSURE(processedImage->GetResourceFormat(&f));
     BlackmagicRawResourceType type;
     MS_ENSURE(processedImage->GetResourceType(&type));
