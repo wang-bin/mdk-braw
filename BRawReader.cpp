@@ -238,7 +238,8 @@ bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
     // TODO: seekCompelete if error later
     if (msec > duration_) // msec can be INT64_MAX, avoid overflow
         msec = duration_;
-    auto index = std::min<uint64_t>((frames_ - 1) * msec / duration_, frames_ - 1);;
+    const auto dt = (duration_ + frames_ - 1) / frames_;
+    auto index = std::min<uint64_t>(frames_ * (msec + dt) / duration_, frames_ - 1);
     if (test_flag(flag, SeekFlag::FromNow|SeekFlag::Frame)) {
         if (msec == 0) {
             seekComplete(duration_ * index_ / frames_, id);
@@ -345,12 +346,12 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     VideoFrame frame(width, height, fmt);
     frame.setBuffers(imageData);
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
-    frame.setDuration((double)duration_/(double)frames_);
+    frame.setDuration((double)duration_/(double)frames_ / 1000.0);
 
     if (seekId > 0) {
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
     }
-    frameAvailable(frame);
+    bool accepted = frameAvailable(frame); // false: out of loop range and begin a new loop
 
     if (index == frames_ - 1 && seeking_ == 0) {
         frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
@@ -360,7 +361,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         return;
     }
     // frameAvailable() will wait in pause state, and return when seeking, do not read the next index
-    if (seeking_ == 0 && state() == State::Running && test_flag(mediaStatus() & MediaStatus::Loaded)) // seeking_ > 0: new seek created by seekComplete when continuously seeking
+    if (accepted && seeking_ == 0 && state() == State::Running && test_flag(mediaStatus() & MediaStatus::Loaded)) // seeking_ > 0: new seek created by seekComplete when continuously seeking
         readAt(index + 1);
 }
 
