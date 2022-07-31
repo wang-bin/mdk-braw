@@ -352,10 +352,9 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
     }
     bool accepted = frameAvailable(frame); // false: out of loop range and begin a new loop
-
-    if (index == frames_ - 1 && seeking_ == 0) {
-        frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
-        if (!test_flag(options() & Options::ContinueAtEnd)) {
+    if (index == frames_ - 1 && seeking_ == 0 && accepted) {
+        accepted = frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
+        if (accepted && !test_flag(options() & Options::ContinueAtEnd)) {
             thread([=]{ unload(); }).detach(); // unload() in current thread will result in dead lock
         }
         return;
