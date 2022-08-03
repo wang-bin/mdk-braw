@@ -27,6 +27,11 @@
 # endif
 # define dlsym(handle, symbol) GetProcAddress((HMODULE)handle, symbol)
 # define dlclose(handle) FreeLibrary((HMODULE)handle)
+#elif defined(__APPLE__)
+# include <CoreFoundation/CoreFoundation.h>
+# define dlopen(filename, flags) load_bundle(filename)
+# define dlsym(handle, symbol) CFBundleGetFunctionPointerForName(handle, CFSTR(symbol))
+# define dlclose(handle) CFRelease(handle)
 #else
 # include <dlfcn.h>
 #endif
@@ -45,8 +50,27 @@
         return fp ARG_V; \
     }
 
-#if !(__APPLE__ + 0)
-static auto load_BlackmagicRawAPI(const char* mod = nullptr)->decltype(dlopen(nullptr, RTLD_LAZY))
+#if (__APPLE__ + 0)
+CFBundleRef load_bundle(const char* fwkName)
+{
+    if (auto m = CFBundleGetMainBundle()) {
+        if (auto url = CFBundleCopyPrivateFrameworksURL(m)) {
+            auto name = CFStringCreateWithCString(kCFAllocatorDefault, fwkName, kCFStringEncodingUTF8);
+            auto fwkUrl = CFURLCreateCopyAppendingPathComponent(kCFAllocatorDefault, url, name, false);
+            CFRelease(name);
+            CFRelease(url);
+            if (fwkUrl) {
+                auto b = CFBundleCreate(kCFAllocatorDefault, fwkUrl);
+                CFRelease(fwkUrl);
+                return b;
+            }
+        }
+    }
+    return nullptr;
+}
+#endif
+
+static auto load_BlackmagicRawAPI(const char* mod = nullptr)
 {
     const auto name_default =
 #if (_WIN32+0)
@@ -63,4 +87,3 @@ static auto load_BlackmagicRawAPI(const char* mod = nullptr)->decltype(dlopen(nu
 extern "C" {
 _BRAW_API(IBlackmagicRawFactory*, CreateBlackmagicRawFactoryInstance, BRAW_ARG0())
 }
-#endif

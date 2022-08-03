@@ -174,15 +174,6 @@ BlackmagicRawResourceFormat from(PixelFormat fmt)
 BRawReader::BRawReader()
     : FrameReader()
 {
-#if (__APPLE__ + 0)
-#ifdef _Pragma
-_Pragma("weak CreateBlackmagicRawFactoryInstance")
-#endif
-    if (!CreateBlackmagicRawFactoryInstance) {
-        clog << "BlackmagicRawAPI.framework is not found!" << endl;
-        return;
-    }
-#endif
     factory_ = CreateBlackmagicRawFactoryInstance();
     if (!factory_) {
         clog << "BlackmagicRawAPI is not available!" << endl;

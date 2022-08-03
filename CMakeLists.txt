@@ -56,8 +56,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE BUILD_MDK_LIB)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_PROJECT_NAME} Threads::Threads)
 if(APPLE)
   target_link_libraries(${PROJECT_NAME} PRIVATE
-    "-framework CoreFoundation"
-    -F${CMAKE_CURRENT_SOURCE_DIR}/sdk/Frameworks "-weak_framework BlackmagicRawAPI")
+    "-framework CoreFoundation")
   # set rpath
 elseif(WIN32)
   target_link_libraries(${PROJECT_NAME} PRIVATE comsuppw) # _bstr_t
