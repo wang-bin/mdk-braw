@@ -192,6 +192,7 @@ BRawReader::BRawReader()
         clog << "BlackmagicRawAPI is not available!" << endl;
         return;
     }
+
 }
 
 bool BRawReader::isSupported(const std::string& url, MediaType type) const
@@ -299,7 +300,7 @@ bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
     data->seekId = id;
     data->seekWaitFrame = !test_flag(flag & SeekFlag::IOCompleteCallback);
     job->SetUserData(data);
-    MS_ENSURE(job->Submit(), false); // FIXME: user data leak
+    MS_ENSURE(job->Submit(), (delete data, false));
     return true;
 }
 
@@ -343,7 +344,7 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
     data->seekWaitFrame = seekWaitFrame;
     decodeAndProcessJob->SetUserData(data);
     // will wait until submitted to gpu if using gpu decoder
-    MS_ENSURE(decodeAndProcessJob->Submit());  // FIXME: user data leak
+    MS_ENSURE(decodeAndProcessJob->Submit(), delete data);
 }
 
 void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBlackmagicRawProcessedImage* processedImage)
@@ -417,7 +418,7 @@ bool BRawReader::readAt(uint64_t index)
     auto data = new UserData();
     data->index = index;
     nextJob->SetUserData(data);
-    MS_ENSURE(nextJob->Submit(), false);  // FIXME: user data leak
+    MS_ENSURE(nextJob->Submit(), (delete data, false));
     return true;
 }
 
