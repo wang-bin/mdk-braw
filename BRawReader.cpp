@@ -15,6 +15,7 @@
 #include <iostream>
 #include <string_view>
 #include <thread>
+#include <sstream>
 
 using namespace std;
 using namespace Microsoft::WRL; //ComPtr
@@ -70,6 +71,7 @@ private:
     };
 
     ComPtr<IBlackmagicRawFactory> factory_;
+    ComPtr<IBlackmagicRawPipelineDevice> dev_;
     ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
     PixelFormat format_ = PixelFormat::RGBA;
@@ -171,6 +173,17 @@ BlackmagicRawResourceFormat from(PixelFormat fmt)
     }
 }
 
+string fourcc_to_str(uint32_t fcc)
+{
+    stringstream ss;
+    ss << std::hex << fcc << std::dec;
+    char t[] = { '\'', char((fcc>>24)&0xff), char((fcc>>16)&0xff),char((fcc>>8)&0xff),  char(fcc & 0xff), '\''};
+    for (auto i : t)
+        if (!i)
+            return ss.str();
+    return {t, std::size(t)};
+}
+
 BRawReader::BRawReader()
     : FrameReader()
 {
@@ -178,9 +191,6 @@ BRawReader::BRawReader()
     if (!factory_) {
         clog << "BlackmagicRawAPI is not available!" << endl;
         return;
-    }
-    if (auto env = std::getenv("BRAW_FORMAT"); env) {
-        format_ = VideoFormat::fromName(env);
     }
 }
 
@@ -203,6 +213,15 @@ bool BRawReader::load()
     if (!factory_)
         return false;
     MS_ENSURE(factory_->CreateCodec(&codec_), false);
+
+    parseDecoderOptions();
+
+    if (dev_) {
+        ComPtr<IBlackmagicRawConfiguration> config;
+        MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
+        MS_ENSURE(config->SetFromDevice(dev_.Get()), false);
+    }
+
     // TODO: bstr_ptr
     BStr file(url().data());
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
@@ -213,7 +232,6 @@ bool BRawReader::load()
     e.detail = "braw";
     dispatchEvent(e);
 
-    parseDecoderOptions();
 
     ComPtr<IBlackmagicRawMetadataIterator> mdit;
     MS_ENSURE(clip_->GetMetadataIterator(&mdit), false);
@@ -434,6 +452,19 @@ void BRawReader::setDecoderOption(const char* key, const char* val)
 {
     if ("format"sv == key) {
         format_ = VideoFormat::fromName(val);
+    } else if ("gpu"sv == key) {
+        ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
+        MS_ENSURE(factory_->CreatePipelineDeviceIterator(blackmagicRawPipelineMetal, blackmagicRawInteropOpenGL, &it));
+        do {
+            BlackmagicRawPipeline pipeline = 0;
+            BlackmagicRawInterop interop = 0;
+            MS_WARN(it->GetPipeline(&pipeline));
+            MS_WARN(it->GetInterop(&interop));
+            MS_WARN(it->CreateDevice(&dev_));
+            clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", dev: " << dev_.Get() << endl;
+            if (dev_)
+                break;
+        } while (SUCCEEDED(it->Next()));
     }
 }
 
