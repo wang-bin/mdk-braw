@@ -72,9 +72,11 @@ private:
 
     ComPtr<IBlackmagicRawFactory> factory_;
     ComPtr<IBlackmagicRawPipelineDevice> dev_;
+    ComPtr<IBlackmagicRawResourceManager> resMgr_;
     ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
     PixelFormat format_ = PixelFormat::RGBA;
+    int copy_ = 1; // copy gpu resources
     int64_t duration_ = 0;
     int64_t frames_ = 0;
     atomic<int> seeking_ = 0;
@@ -221,6 +223,13 @@ bool BRawReader::load()
         ComPtr<IBlackmagicRawConfiguration> config;
         MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
         MS_ENSURE(config->SetFromDevice(dev_.Get()), false);
+
+        ComPtr<IBlackmagicRawConfigurationEx> configEx;
+        MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfigurationEx, (void**)&configEx), false);
+        MS_ENSURE(configEx->GetResourceManager(&resMgr_), false);
+        BlackmagicRawInstructionSet instruction;
+        MS_ENSURE(configEx->GetInstructionSet(&instruction), false);
+        clog << "BlackmagicRawInstructionSet: " << fourcc_to_str(instruction) << endl;
     }
 
     // TODO: bstr_ptr
@@ -377,20 +386,36 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     unsigned int height = 0;
     unsigned int sizeBytes = 0;
     uint8_t const* imageData[3] = {};
+    void* res = nullptr;
     BlackmagicRawResourceFormat f;
+
     MS_ENSURE(processedImage->GetWidth(&width));
     MS_ENSURE(processedImage->GetHeight(&height));
     MS_ENSURE(processedImage->GetResourceSizeBytes(&sizeBytes));
-    MS_ENSURE(processedImage->GetResource((void**)&imageData[0]));
+    MS_ENSURE(processedImage->GetResource(&res));
     MS_ENSURE(processedImage->GetResourceFormat(&f));
     BlackmagicRawResourceType type;
     MS_ENSURE(processedImage->GetResourceType(&type));
+
+    if (type != blackmagicRawResourceTypeBufferCPU) {
+        BlackmagicRawPipeline pipeline;
+        void* context = nullptr;
+        void* cmdQueue = nullptr;
+        MS_ENSURE(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
+        if (copy_) {
+    // TODO: less copy via [MTLBuffer newBufferWithBytesNoCopy:length:options:deallocator:] from VideoFrame.buffer(0)
+            MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0]));
+        }
+    }
+    if (!imageData[0]) { // cpu
+        imageData[0] = (uint8_t*)res;
+    }
+
     VideoFormat fmt = to(f);
     VideoFrame frame(width, height, fmt);
     frame.setBuffers(imageData);
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
     frame.setDuration((double)duration_/(double)frames_ / 1000.0);
-
     if (seekId > 0) {
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
     }
@@ -454,6 +479,9 @@ void BRawReader::setDecoderOption(const char* key, const char* val)
     if ("format"sv == key) {
         format_ = VideoFormat::fromName(val);
     } else if ("gpu"sv == key) {
+        if ("auto"sv == val) {
+        } else if ("metal"sv == val) {
+        }
         ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
         MS_ENSURE(factory_->CreatePipelineDeviceIterator(blackmagicRawPipelineMetal, blackmagicRawInteropOpenGL, &it));
         do {
@@ -466,6 +494,8 @@ void BRawReader::setDecoderOption(const char* key, const char* val)
             if (dev_)
                 break;
         } while (SUCCEEDED(it->Next()));
+    } else if ("copy"sv == key) {
+        copy_ = atoi(val);
     }
 }
 
