@@ -7,6 +7,7 @@
 #include "mdk/VideoFrame.h"
 #include "mdk/AudioFrame.h"
 #include "BlackmagicRawAPI.h"
+#include "BRawVideoBufferPool.h"
 #include "ComPtr.h"
 #include "BStr.h"
 #include <algorithm>
@@ -81,6 +82,8 @@ private:
     int64_t frames_ = 0;
     atomic<int> seeking_ = 0;
     atomic<uint64_t> index_ = 0; // for stepping frame forward/backward
+
+    NativeVideoBufferPoolRef pool_ = NativeVideoBufferPool::create("BRAW");
 };
 
 void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip, IBlackmagicRawMetadataIterator* i)
@@ -216,12 +219,12 @@ bool BRawReader::load()
     if (!factory_)
         return false;
     MS_ENSURE(factory_->CreateCodec(&codec_), false);
+    ComPtr<IBlackmagicRawConfiguration> config;
+    MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
 
     parseDecoderOptions();
 
     if (dev_) {
-        ComPtr<IBlackmagicRawConfiguration> config;
-        MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
         MS_ENSURE(config->SetFromDevice(dev_.Get()), false);
 
         ComPtr<IBlackmagicRawConfigurationEx> configEx;
@@ -397,6 +400,10 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     BlackmagicRawResourceType type;
     MS_ENSURE(processedImage->GetResourceType(&type));
 
+
+    VideoFormat fmt = to(f);
+    VideoFrame frame(width, height, fmt);
+
     if (type != blackmagicRawResourceTypeBufferCPU) {
         BlackmagicRawPipeline pipeline;
         void* context = nullptr;
@@ -405,15 +412,31 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         if (copy_) {
     // TODO: less copy via [MTLBuffer newBufferWithBytesNoCopy:length:options:deallocator:] from VideoFrame.buffer(0)
             MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0]));
+            frame.setBuffers(imageData);
+        } else {
+            BRawVideoBuffers bb{};
+            bb.width = width;
+            bb.height = height;
+            bb.format = fmt.format();
+            bb.gpuResource = res;
+            bb.type = type;
+            bb.device = dev_.Get();
+            bb.device->AddRef();
+            bb.resMgr = resMgr_.Get();
+            bb.resMgr->AddRef();
+            auto dev = bb.device;
+            auto resMgr = bb.resMgr;
+            auto nativeBuf = pool_->getBuffer(&bb, [=]{
+                dev->Release();
+                resMgr->Release();
+            });
+            frame.setNativeBuffer(nativeBuf);
         }
-    }
-    if (!imageData[0]) { // cpu
+    } else { // cpu
         imageData[0] = (uint8_t*)res;
+        frame.setBuffers(imageData);
     }
 
-    VideoFormat fmt = to(f);
-    VideoFrame frame(width, height, fmt);
-    frame.setBuffers(imageData);
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
     frame.setDuration((double)duration_/(double)frames_ / 1000.0);
     if (seekId > 0) {
@@ -480,6 +503,8 @@ void BRawReader::setDecoderOption(const char* key, const char* val)
         format_ = VideoFormat::fromName(val);
     } else if ("gpu"sv == key) {
         if ("auto"sv == val) {
+        } else if ("no"sv == val) {
+            return;
         } else if ("metal"sv == val) {
         }
         ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
@@ -508,5 +533,6 @@ MDK_NS_END
 extern "C" MDK_API int mdk_plugin_load() {
     using namespace MDK_NS;
     register_framereader_braw();
+    register_native_buffer_pool_braw();
     return abiVersion();
 }

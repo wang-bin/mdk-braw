@@ -11,7 +11,7 @@ endif()
 project(mdk-braw VERSION 0.11.0 DESCRIPTION "mdk braw plugin") # LANGUAGES C CXX CXXPCH) # VERSION: cmake 3.0+
 set(PROJECT_VERSION_TWEAK 0)
 if(CMAKE_PROJECT_NAME STREQUAL mdk) # build in source tree
-    include_directories(${CMAKE_SOURCE_DIR}/include)
+    include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/video/hwa)
 else()
   # TODO: FindMDKAbi
 endif()
@@ -41,6 +41,8 @@ endif()
 add_library(${PROJECT_NAME} MODULE
     BRawReader.cpp
     BRawAPILoader.cpp
+    BRawVideoBufferPool.cpp
+    BRawGLInterop.cpp
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -55,11 +57,13 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_compile_definitions(${PROJECT_NAME} PRIVATE BUILD_MDK_LIB)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_PROJECT_NAME} Threads::Threads)
 if(APPLE)
+  target_sources(${PROJECT_NAME} PRIVATE BRawMTLInterop.mm)
   target_link_libraries(${PROJECT_NAME} PRIVATE
-    "-framework CoreFoundation")
+    "-framework CoreFoundation" "-framework Metal")
   # set rpath
 elseif(WIN32)
-  target_link_libraries(${PROJECT_NAME} PRIVATE comsuppw) # _bstr_t
+  target_sources(${PROJECT_NAME} PRIVATE BRawD3D11Interop.cpp)
+  target_link_libraries(${PROJECT_NAME} PRIVATE comsuppw d3d11) # _bstr_t
 else()
   target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 endif()
