@@ -61,6 +61,8 @@ public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
     ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
     ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
+protected:
+    void onPropertyChanged(const std::string& /*key*/, const std::string& /*value*/) override;
 private:
     bool readAt(uint64_t index);
     void parseDecoderOptions();
@@ -77,6 +79,8 @@ private:
     ComPtr<IBlackmagicRawResourceManager> resMgr_;
     ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
+    BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU;
+    BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
     PixelFormat format_ = PixelFormat::RGBA;
     int copy_ = 1; // copy gpu resources
     uint32_t threads_ = 0;
@@ -228,6 +232,22 @@ bool BRawReader::load()
 
     if (threads_ > 0)
         MS_ENSURE(config->SetCPUThreads(threads_), false);
+
+    if (pipeline_ != blackmagicRawPipelineCPU || interop_ != blackmagicRawInteropNone) {
+        ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
+        MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline_, interop_, &it), false); // TODO: none interop
+        do {
+            BlackmagicRawInterop interop = 0;
+            BlackmagicRawPipeline pipeline = blackmagicRawPipelineCPU;
+            ComPtr<IBlackmagicRawPipelineDevice> dev;
+            MS_WARN(it->GetPipeline(&pipeline));
+            MS_WARN(it->GetInterop(&interop));
+            MS_WARN(it->CreateDevice(&dev_)); // maybe E_FAIL
+            clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", dev: " << dev_.Get() << endl;
+            if (dev_)
+                break;
+        } while (it->Next() == S_OK);
+    }
 
     if (dev_) {
         MS_ENSURE(config->SetFromDevice(dev_.Get()), false);
@@ -487,65 +507,42 @@ void BRawReader::parseDecoderOptions()
     for (const auto& i : decoders(MediaType::Video)) {
         if (auto colon = i.find(':'); colon != string::npos) {
             if (string_view(i).substr(0, colon) == name()) {
-                auto options = i.substr(colon + 1);
-                char* p = &options[0];
-                while (true) {
-                    char* v = strchr(p, '=');
-                    if (!v)
-                        break;
-                    *v++ = 0;
-                    char* pp = strchr(v, ':');
-                    if (pp)
-                        *pp = 0;
-                    setDecoderOption(p, v);
-                    if (!pp)
-                        break;
-                    p = pp + 1;
-                }
+                parse(i.data() + colon);
             }
             return;
         }
     }
 }
 
-void BRawReader::setDecoderOption(const char* key, const char* val)
+void BRawReader::onPropertyChanged(const std::string& key, const std::string& val)
 {
-    if ("format"sv == key) {
-        format_ = VideoFormat::fromName(val);
-    } else if ("threads"sv == key) {
-        threads_ = atoi(val);
-    } else if ("gpu"sv == key) {
-        BlackmagicRawPipeline pipeline = blackmagicRawPipelineCPU;
+    if ("format" == key) {
+        format_ = VideoFormat::fromName(val.data());
+    } else if ("threads" == key) {
+        threads_ = stoi(val);
+    } else if ("gpu" == key) {
         if ("auto"sv == val) {
 #if (__APPLE__ + 0)
-            pipeline = blackmagicRawPipelineMetal;
+            pipeline_ = blackmagicRawPipelineMetal;
 #else
-            pipeline = blackmagicRawPipelineOpenCL;
+            pipeline_ = blackmagicRawPipelineOpenCL;
 #endif
-        } else if ("no"sv == val) {
-            return;
-        } else if ("metal"sv == val) {
-            pipeline = blackmagicRawPipelineMetal;
-        } else if ("opencl"sv == val) {
-            pipeline = blackmagicRawPipelineOpenCL;
-        } else if ("cuda"sv == val) {
-            pipeline = blackmagicRawPipelineCUDA;
-        } else if ("cpu"sv == val) {
-            pipeline = blackmagicRawPipelineCPU;
+        } else if ("metal" == val) {
+            pipeline_ = blackmagicRawPipelineMetal;
+        } else if ("opencl" == val) {
+            pipeline_ = blackmagicRawPipelineOpenCL; // interop must be none on mac. black host image?
+        } else if ("cuda" == val) {
+            pipeline_ = blackmagicRawPipelineCUDA;
+        } else {
+            pipeline_ = blackmagicRawPipelineCPU;
         }
-        ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
-        MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline, blackmagicRawInteropOpenGL, &it));
-        do {
-            BlackmagicRawInterop interop = 0;
-            MS_WARN(it->GetPipeline(&pipeline));
-            MS_WARN(it->GetInterop(&interop));
-            MS_WARN(it->CreateDevice(&dev_));
-            clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", dev: " << dev_.Get() << endl;
-            if (dev_)
-                break;
-        } while (SUCCEEDED(it->Next()));
-    } else if ("copy"sv == key) {
-        copy_ = atoi(val);
+    } else if ("interop" == key) {
+        if (val == "opengl")
+            interop_ = blackmagicRawInteropOpenGL;
+        else
+            interop_ = blackmagicRawInteropNone;
+    } else if ("copy" == key) {
+        copy_ = stoi(val);
     }
 }
 
