@@ -2,6 +2,7 @@
  * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
+// TODO: scale, metadata, attributes
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
 #include "mdk/VideoFrame.h"
@@ -78,6 +79,7 @@ private:
     ComPtr<IBlackmagicRawClip> clip_;
     PixelFormat format_ = PixelFormat::RGBA;
     int copy_ = 1; // copy gpu resources
+    uint32_t threads_ = 0;
     int64_t duration_ = 0;
     int64_t frames_ = 0;
     atomic<int> seeking_ = 0;
@@ -224,6 +226,9 @@ bool BRawReader::load()
 
     parseDecoderOptions();
 
+    if (threads_ > 0)
+        MS_ENSURE(config->SetCPUThreads(threads_), false);
+
     if (dev_) {
         MS_ENSURE(config->SetFromDevice(dev_.Get()), false);
 
@@ -233,6 +238,12 @@ bool BRawReader::load()
         BlackmagicRawInstructionSet instruction;
         MS_ENSURE(configEx->GetInstructionSet(&instruction), false);
         clog << "BlackmagicRawInstructionSet: " << fourcc_to_str(instruction) << endl;
+
+        ComPtr<IBlackmagicRawOpenGLInteropHelper> interop;
+        MS_ENSURE(dev_->GetOpenGLInteropHelper(&interop), false);
+        BlackmagicRawResourceFormat bestFormat;
+        MS_ENSURE(interop->GetPreferredResourceFormat(&bestFormat), false);
+        clog << "GetPreferredResourceFormat: " << to(bestFormat) << endl;
     }
 
     // TODO: bstr_ptr
@@ -501,16 +512,30 @@ void BRawReader::setDecoderOption(const char* key, const char* val)
 {
     if ("format"sv == key) {
         format_ = VideoFormat::fromName(val);
+    } else if ("threads"sv == key) {
+        threads_ = atoi(val);
     } else if ("gpu"sv == key) {
+        BlackmagicRawPipeline pipeline = blackmagicRawPipelineCPU;
         if ("auto"sv == val) {
+#if (__APPLE__ + 0)
+            pipeline = blackmagicRawPipelineMetal;
+#else
+            pipeline = blackmagicRawPipelineOpenCL;
+#endif
         } else if ("no"sv == val) {
             return;
         } else if ("metal"sv == val) {
+            pipeline = blackmagicRawPipelineMetal;
+        } else if ("opencl"sv == val) {
+            pipeline = blackmagicRawPipelineOpenCL;
+        } else if ("cuda"sv == val) {
+            pipeline = blackmagicRawPipelineCUDA;
+        } else if ("cpu"sv == val) {
+            pipeline = blackmagicRawPipelineCPU;
         }
         ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
-        MS_ENSURE(factory_->CreatePipelineDeviceIterator(blackmagicRawPipelineMetal, blackmagicRawInteropOpenGL, &it));
+        MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline, blackmagicRawInteropOpenGL, &it));
         do {
-            BlackmagicRawPipeline pipeline = 0;
             BlackmagicRawInterop interop = 0;
             MS_WARN(it->GetPipeline(&pipeline));
             MS_WARN(it->GetInterop(&interop));
