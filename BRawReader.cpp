@@ -472,6 +472,7 @@ bool BRawReader::setupPipeline()
         return true;
     ComPtr<IBlackmagicRawPipelineIterator> pit;
     MS_ENSURE(factory_->CreatePipelineIterator(interop_, &pit), false);
+    BlackmagicRawPipeline best = 0; // metal > cuda > opencl > cpu
     bool found = false;
     do {
         BlackmagicRawPipeline pipeline;
@@ -480,8 +481,14 @@ bool BRawReader::setupPipeline()
         MS_WARN(pit->GetInterop(&interop));
         clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << endl;
         if (!found)
-            found = pipeline == pipeline_ && interop_ == interop;
+            found = !pipeline_ || (pipeline == pipeline_ && interop_ == interop);
+        if (!best || best == blackmagicRawPipelineCPU)
+            best = pipeline;
+        else if (best == blackmagicRawPipelineOpenCL && pipeline != blackmagicRawPipelineCPU)
+            best = pipeline;
     } while (pit->Next() == S_OK);
+    if (!pipeline_)
+        pipeline_ = best;
     if (!found) {
         clog << "braw pipeline not found" << endl;
         return false;
@@ -547,12 +554,8 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
     } else if ("threads" == key) {
         threads_ = stoi(val);
     } else if ("gpu" == key || "device" == key) {
-        if ("auto"sv == val) {
-#if (__APPLE__ + 0)
-            pipeline_ = blackmagicRawPipelineMetal;
-#else
-            pipeline_ = blackmagicRawPipelineOpenCL;
-#endif
+        if ("auto"sv == val) { // metal > cuda > opencl > cpu
+            pipeline_ = 0;
         } else if ("metal" == val) {
             pipeline_ = blackmagicRawPipelineMetal;
         } else if ("opencl" == val) {
