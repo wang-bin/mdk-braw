@@ -56,7 +56,9 @@ public:
     void TrimComplete(IBlackmagicRawJob*, HRESULT) override {}
     void SidecarMetadataParseWarning(IBlackmagicRawClip*, BRawStr fileName, uint32_t lineNumber, BRawStr info) override {}
     void SidecarMetadataParseError(IBlackmagicRawClip*, BRawStr fileName, uint32_t lineNumber, BRawStr info) override {}
-    void PreparePipelineComplete(void*, HRESULT) override {}
+    void PreparePipelineComplete(void*, HRESULT) override {
+        clog << MDK_FUNCINFO << endl;
+    }
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
     ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
@@ -83,14 +85,14 @@ private:
     BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU;
     BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
     PixelFormat format_ = PixelFormat::RGBA;
-    int copy_ = 1; // copy gpu resources
+    int copy_ = 0; // copy gpu resources
     uint32_t threads_ = 0;
     int64_t duration_ = 0;
     int64_t frames_ = 0;
     atomic<int> seeking_ = 0;
     atomic<uint64_t> index_ = 0; // for stepping frame forward/backward
 
-    NativeVideoBufferPoolRef pool_ = NativeVideoBufferPool::create("BRAW");
+    NativeVideoBufferPoolRef pool_;
 };
 
 void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip, IBlackmagicRawMetadataIterator* i)
@@ -420,10 +422,33 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         void* context = nullptr;
         void* cmdQueue = nullptr;
         MS_ENSURE(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
-        if (copy_) {
+        if (copy_ || !pool_) {
     // TODO: less copy via [MTLBuffer newBufferWithBytesNoCopy:length:options:deallocator:] from VideoFrame.buffer(0)
             MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0]));
             frame.setBuffers(imageData);
+        } else if (pipeline_ == blackmagicRawPipelineCUDA) {
+#if defined(__x86_64) || defined(AMD64) || defined(_M_AMD64) || (_LP64+0) > 0 || defined(__aarch64__)
+typedef unsigned long long CUdeviceptr;
+#else
+typedef unsigned int CUdeviceptr;
+#endif
+            struct {
+                CUdeviceptr cuptr[3]{};
+                int stride[3]{};
+                PixelFormat pixfmt;
+            } cuframe{};
+            cuframe.pixfmt = fmt;
+            cuframe.cuptr[0] = (CUdeviceptr)res;
+            cuframe.stride[0] = fmt.bytesPerLine(width, 0);
+            for (int i = 1; i < fmt.planeCount(); ++i) {
+                cuframe.cuptr[i] = CUdeviceptr(cuframe.cuptr[i-1] + cuframe.stride[i-1] * fmt.height(height, i-1));
+                cuframe.stride[i] = fmt.bytesPerLine(width, i);
+            }
+            processedImage->AddRef();
+            auto nativeBuf = pool_->getBuffer(&cuframe, [=]{
+                processedImage->Release();
+            });
+            frame.setNativeBuffer(nativeBuf);
         } else {
             BRawVideoBuffers bb{};
             bb.width = width;
@@ -516,6 +541,12 @@ bool BRawReader::setupPipeline()
     BlackmagicRawResourceFormat bestFormat;
     MS_ENSURE(interop->GetPreferredResourceFormat(&bestFormat), false);
     clog << "GetPreferredResourceFormat: " << to(bestFormat) << endl;
+
+    codec_->PreparePipelineForDevice(dev_.Get(), nullptr);
+    if (pipeline_ == blackmagicRawPipelineCUDA)
+        pool_ = NativeVideoBufferPool::create("CUDA"); // better support d3d11/opengl/opengles
+    else
+        pool_ = NativeVideoBufferPool::create("BRAW"); // seems not work with cuda and opencl
     return true;
 }
 
