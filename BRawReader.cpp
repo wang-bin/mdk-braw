@@ -64,6 +64,7 @@ public:
 protected:
     void onPropertyChanged(const std::string& /*key*/, const std::string& /*value*/) override;
 private:
+    bool setupPipeline();
     bool readAt(uint64_t index);
     void parseDecoderOptions();
     void setDecoderOption(const char* key, const char* val);
@@ -233,38 +234,17 @@ bool BRawReader::load()
     if (threads_ > 0)
         MS_ENSURE(config->SetCPUThreads(threads_), false);
 
-    if (pipeline_ != blackmagicRawPipelineCPU || interop_ != blackmagicRawInteropNone) {
-        ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
-        MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline_, interop_, &it), false); // TODO: none interop
-        do {
-            BlackmagicRawInterop interop = 0;
-            BlackmagicRawPipeline pipeline = blackmagicRawPipelineCPU;
-            ComPtr<IBlackmagicRawPipelineDevice> dev;
-            MS_WARN(it->GetPipeline(&pipeline));
-            MS_WARN(it->GetInterop(&interop));
-            MS_WARN(it->CreateDevice(&dev_)); // maybe E_FAIL
-            clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", dev: " << dev_.Get() << endl;
-            if (dev_)
-                break;
-        } while (it->Next() == S_OK);
-    }
+    setupPipeline();
 
-    if (dev_) {
+    if (dev_)
         MS_ENSURE(config->SetFromDevice(dev_.Get()), false);
 
-        ComPtr<IBlackmagicRawConfigurationEx> configEx;
-        MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfigurationEx, (void**)&configEx), false);
-        MS_ENSURE(configEx->GetResourceManager(&resMgr_), false);
-        BlackmagicRawInstructionSet instruction;
-        MS_ENSURE(configEx->GetInstructionSet(&instruction), false);
-        clog << "BlackmagicRawInstructionSet: " << fourcc_to_str(instruction) << endl;
-
-        ComPtr<IBlackmagicRawOpenGLInteropHelper> interop;
-        MS_ENSURE(dev_->GetOpenGLInteropHelper(&interop), false);
-        BlackmagicRawResourceFormat bestFormat;
-        MS_ENSURE(interop->GetPreferredResourceFormat(&bestFormat), false);
-        clog << "GetPreferredResourceFormat: " << to(bestFormat) << endl;
-    }
+    ComPtr<IBlackmagicRawConfigurationEx> configEx;
+    MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfigurationEx, (void**)&configEx), false);
+    MS_ENSURE(configEx->GetResourceManager(&resMgr_), false);
+    BlackmagicRawInstructionSet instruction;
+    MS_ENSURE(configEx->GetInstructionSet(&instruction), false);
+    clog << "BlackmagicRawInstructionSet: " << fourcc_to_str(instruction) << endl;
 
     // TODO: bstr_ptr
     BStr file(url().data());
@@ -486,6 +466,52 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         readAt(index + 1);
 }
 
+bool BRawReader::setupPipeline()
+{
+    if (pipeline_ == blackmagicRawPipelineCPU && interop_ == blackmagicRawInteropNone)
+        return true;
+    ComPtr<IBlackmagicRawPipelineIterator> pit;
+    MS_ENSURE(factory_->CreatePipelineIterator(interop_, &pit), false);
+    bool found = false;
+    do {
+        BlackmagicRawPipeline pipeline;
+        MS_WARN(pit->GetPipeline(&pipeline));
+        BlackmagicRawInterop interop;
+        MS_WARN(pit->GetInterop(&interop));
+        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << endl;
+        if (!found)
+            found = pipeline == pipeline_ && interop_ == interop;
+    } while (pit->Next() == S_OK);
+    if (!found) {
+        clog << "braw pipeline not found" << endl;
+        return false;
+    }
+
+    ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
+    MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline_, interop_, &it), false); // TODO: none interop
+    do {
+        BlackmagicRawInterop interop = 0;
+        BlackmagicRawPipeline pipeline = blackmagicRawPipelineCPU;
+        ComPtr<IBlackmagicRawPipelineDevice> dev;
+        MS_WARN(it->GetPipeline(&pipeline));
+        MS_WARN(it->GetInterop(&interop));
+        MS_WARN(it->CreateDevice(&dev_)); // maybe E_FAIL
+        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", dev: " << dev_.Get() << endl;
+        if (dev_)
+            break;
+    } while (it->Next() == S_OK); // crash if pipeline + interop is not supported
+
+    if (!dev_)
+        return false;
+
+    ComPtr<IBlackmagicRawOpenGLInteropHelper> interop;
+    MS_ENSURE(dev_->GetOpenGLInteropHelper(&interop), false);
+    BlackmagicRawResourceFormat bestFormat;
+    MS_ENSURE(interop->GetPreferredResourceFormat(&bestFormat), false);
+    clog << "GetPreferredResourceFormat: " << to(bestFormat) << endl;
+    return true;
+}
+
 bool BRawReader::readAt(uint64_t index)
 {
     if (!test_flag(mediaStatus(), MediaStatus::Loaded))
@@ -520,7 +546,7 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
         format_ = VideoFormat::fromName(val.data());
     } else if ("threads" == key) {
         threads_ = stoi(val);
-    } else if ("gpu" == key) {
+    } else if ("gpu" == key || "device" == key) {
         if ("auto"sv == val) {
 #if (__APPLE__ + 0)
             pipeline_ = blackmagicRawPipelineMetal;
