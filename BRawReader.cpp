@@ -2,7 +2,7 @@
  * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
-// TODO: scale, metadata, attributes
+// TODO: metadata, attributes
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
 #include "mdk/VideoFrame.h"
@@ -21,7 +21,6 @@
 
 using namespace std;
 using namespace Microsoft::WRL; //ComPtr
-// GPU: CreatePipeline/DeviceIterator
 
 #define MS_ENSURE(f, ...) MS_CHECK(f, return __VA_ARGS__;)
 #define MS_WARN(f) MS_CHECK(f)
@@ -87,6 +86,9 @@ private:
     string deviceName_; // opencl device can be NVIDIA(adapter name?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
     PixelFormat format_ = PixelFormat::RGBA;
     int copy_ = 0; // copy gpu resources
+    BlackmagicRawResolutionScale scale_ = blackmagicRawResolutionScaleFull; // higher fps if scaled
+    uint32_t scaleToW_ = 0; // closest down scale to target width
+    uint32_t scaleToH_ = 0;
     uint32_t threads_ = 0;
     int64_t duration_ = 0;
     int64_t frames_ = 0;
@@ -259,6 +261,21 @@ bool BRawReader::load()
     e.detail = "braw";
     dispatchEvent(e);
 
+    if (scaleToW_ > 0 || scaleToH_ > 0) {
+        ComPtr<IBlackmagicRawClipResolutions> res;
+        MS_ENSURE(clip_->QueryInterface(IID_IBlackmagicRawClipResolutions, &res), false);
+        MS_ENSURE(res->GetClosestScaleForResolution(scaleToW_, scaleToH_, false, &scale_), false);
+        uint32_t retW = 0, retH = 0;
+        MS_ENSURE(res->GetClosestResolutionForScale(scale_, &retW, &retH), false);
+        clog << "desired resolution: " << scaleToW_ << "x" << scaleToH_ << ", result: " << retW << "x" << retH << " scale: " << fourcc_to_str(scale_) << endl;
+        uint32_t count = 0;
+        MS_WARN(res->GetResolutionCount(&count));
+        for (uint32_t i = 0; i < count; ++i) {
+            uint32_t w = 0, h = 0;
+            MS_ENSURE(res->GetResolution(i, &w, &h), false);
+            clog << "supported resolution " << w << "x" << h << endl;
+        }
+    }
 
     ComPtr<IBlackmagicRawMetadataIterator> mdit;
     MS_ENSURE(clip_->GetMetadataIterator(&mdit), false);
@@ -360,6 +377,7 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
         update(MediaStatus::Loaded|MediaStatus::End); // Options::ContinueAtEnd
     }
 
+    MS_WARN(frame->SetResolutionScale(scale_));
     MS_ENSURE(frame->SetResourceFormat(from(format_)));
     IBlackmagicRawJob* decodeAndProcessJob = nullptr; // NOT ComPtr!
     MS_ENSURE(frame->CreateJobDecodeAndProcessFrame(nullptr, nullptr, &decodeAndProcessJob));
@@ -637,6 +655,16 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
         transform(deviceName_.begin(), deviceName_.end(), deviceName_.begin(), [](unsigned char c){ return std::tolower(c);});
     } else if ("copy" == key) {
         copy_ = stoi(val);
+    } else if ("scale" == key || "size" == key) { // widthxheight or width(height=width)
+        if (val.find('x') != string::npos) { // closest scale to target resolution
+            char* s = nullptr;
+            scaleToW_ = strtoul(val.data(), &s, 10);
+            if (s && s[0] == 'x')
+                scaleToH_ = strtoul(s + 1, nullptr, 10);
+        } else {
+            scaleToW_ = strtoul(val.data(), nullptr, 10);
+            scaleToH_ = scaleToW_;
+        }
     }
 }
 
