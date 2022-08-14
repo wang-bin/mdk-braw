@@ -621,8 +621,8 @@ void BRawReader::parseDecoderOptions()
         if (auto colon = i.find(':'); colon != string::npos) {
             if (string_view(i).substr(0, colon) == name()) {
                 parse(i.data() + colon);
+                return;
             }
-            return;
         }
     }
 }
