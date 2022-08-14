@@ -82,8 +82,9 @@ private:
     ComPtr<IBlackmagicRawResourceManager> resMgr_;
     ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
-    BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU;
+    BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU; // TODO: 0 auto
     BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
+    string deviceName_; // opencl device can be NVIDIA(adapter name?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
     PixelFormat format_ = PixelFormat::RGBA;
     int copy_ = 0; // copy gpu resources
     uint32_t threads_ = 0;
@@ -422,7 +423,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         void* context = nullptr;
         void* cmdQueue = nullptr;
         MS_ENSURE(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
-        if (copy_ || !pool_) {
+        if ((copy_ || !pool_) && pipeline_ != blackmagicRawPipelineCUDA) { // GetResourceHostPointer does not work for cuda?
     // TODO: less copy via [MTLBuffer newBufferWithBytesNoCopy:length:options:deallocator:] from VideoFrame.buffer(0)
             MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0]));
             frame.setBuffers(imageData);
@@ -493,7 +494,7 @@ typedef unsigned int CUdeviceptr;
 
 bool BRawReader::setupPipeline()
 {
-    if (pipeline_ == blackmagicRawPipelineCPU && interop_ == blackmagicRawInteropNone)
+    if (pipeline_ == blackmagicRawPipelineCPU && interop_ == blackmagicRawInteropNone && deviceName_.empty())
         return true;
     ComPtr<IBlackmagicRawPipelineIterator> pit;
     MS_ENSURE(factory_->CreatePipelineIterator(interop_, &pit), false);
@@ -501,10 +502,14 @@ bool BRawReader::setupPipeline()
     bool found = false;
     do {
         BlackmagicRawPipeline pipeline;
+        BRawStr nameb = nullptr;
+        string name = "?";
+        if (SUCCEEDED(pit->GetName(&nameb))) // "CPU" or "GPU"
+            name = BStr::to_string(nameb);
         MS_WARN(pit->GetPipeline(&pipeline));
         BlackmagicRawInterop interop;
         MS_WARN(pit->GetInterop(&interop));
-        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << endl;
+        clog << name << " braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << endl;
         if (!found)
             found = !pipeline_ || (pipeline == pipeline_ && interop_ == interop);
         if (!best || best == blackmagicRawPipelineCPU)
@@ -527,14 +532,31 @@ bool BRawReader::setupPipeline()
         ComPtr<IBlackmagicRawPipelineDevice> dev;
         MS_WARN(it->GetPipeline(&pipeline));
         MS_WARN(it->GetInterop(&interop));
-        MS_WARN(it->CreateDevice(&dev_)); // maybe E_FAIL
-        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", dev: " << dev_.Get() << endl;
-        if (dev_)
-            break;
+        MS_WARN(it->CreateDevice(&dev)); // maybe E_FAIL
+        string name = "?";
+        if (dev) {
+            BRawStr nameb = nullptr;
+            if (SUCCEEDED(dev->GetName(&nameb)))
+                name = BStr::to_string(nameb);
+        }
+        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", device: " << name << " - " << dev.Get();
+        if (!deviceName_.empty()) {
+            transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c);});
+            if (name.find(deviceName_) != string::npos) {
+                dev_ = dev;
+                clog << ". Selected";
+            }
+        } else if (!dev_) { // select the 1st device
+            dev_ = dev;
+            clog << ". Selected";
+        }
+        clog << endl;
     } while (it->Next() == S_OK); // crash if pipeline + interop is not supported
 
-    if (!dev_)
+    if (!dev_) {
+        clog << "No device found for pipeline " << fourcc_to_str(pipeline_) << " + interop " << fourcc_to_str(interop_) << " + device " << deviceName_ << endl;
         return false;
+    }
 
     ComPtr<IBlackmagicRawOpenGLInteropHelper> interop;
     MS_ENSURE(dev_->GetOpenGLInteropHelper(&interop), false);
@@ -584,7 +606,7 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
         format_ = VideoFormat::fromName(val.data());
     } else if ("threads" == key) {
         threads_ = stoi(val);
-    } else if ("gpu" == key || "device" == key) {
+    } else if ("gpu" == key || "pipeline" == key) {
         if ("auto"sv == val) { // metal > cuda > opencl > cpu
             pipeline_ = 0;
         } else if ("metal" == val) {
@@ -601,6 +623,9 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
             interop_ = blackmagicRawInteropOpenGL;
         else
             interop_ = blackmagicRawInteropNone;
+    } else if ("device" == key) {
+        deviceName_ = val;
+        transform(deviceName_.begin(), deviceName_.end(), deviceName_.begin(), [](unsigned char c){ return std::tolower(c);});
     } else if ("copy" == key) {
         copy_ = stoi(val);
     }

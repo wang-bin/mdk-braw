@@ -4,6 +4,7 @@
 
 #pragma once
 #include <algorithm>
+#include <string>
 #include <string.h>
 #if (_WIN32 + 0)
 # include <comutil.h>
@@ -13,12 +14,28 @@ class BStr
 {
 public:
 #if (_WIN32 + 0)
-    using StrTye = BSTR;
+    using StrTye = BSTR; // WCHAR
 #elif (__APPLE__ + 0)
     using StrTye = CFStringRef;
 #else
     using StrTye = char*;
 #endif
+
+    static std::string to_string(StrTye s) {
+        if (!s)
+            return {};
+#if (_WIN32 + 0)
+        std::string cs(std::snprintf(nullptr, 0, "%ls", s), 0);
+        std::snprintf(&cs[0], cs.size() + 1, "%ls", s);
+        return cs;
+#elif (__APPLE__ + 0)
+        if (auto cs = CFStringGetCStringPtr(s, kCFStringEncodingUTF8); cs)
+            return cs;
+        return {};
+#else
+        return s;
+#endif
+    }
 
     BStr(const char* s) {
         if (!s)
