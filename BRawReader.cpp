@@ -449,7 +449,16 @@ typedef unsigned int CUdeviceptr;
             auto nativeBuf = pool_->getBuffer(&cuframe, [=]{
                 processedImage->Release();
             });
-            frame.setNativeBuffer(nativeBuf);
+            if (copy_) {
+                NativeVideoBuffer::MapParameter mp;
+                mp.width[0] = width;
+                mp.height[0] = height;
+                mp.stride[0] = mp.stride[1] = cuframe.stride[0];
+                auto ma = static_cast<NativeVideoBuffer::MemoryArray*>(nativeBuf->map(NativeVideoBuffer::Type::HostMemory, &mp));
+                frame.setBuffers((const uint8_t **)ma->data, mp.stride); // TODO: no copy, frame.toHost()
+            } else {
+                frame.setNativeBuffer(nativeBuf);
+            }
         } else {
             BRawVideoBuffers bb{};
             bb.width = width;
