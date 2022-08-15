@@ -81,6 +81,8 @@ private:
     ComPtr<IBlackmagicRawResourceManager> resMgr_;
     ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
+    void* processedRes_ = nullptr; // gpu write cpu read in copy mode
+    BlackmagicRawResourceType processedType_ = 0;
     BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU; // TODO: 0 auto
     BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
     string deviceName_; // opencl device can be NVIDIA(adapter name?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
@@ -309,6 +311,13 @@ bool BRawReader::unload()
     }
     // TODO: job->Abort();
     codec_->FlushJobs(); // must wait all jobs to safe release
+    if (processedRes_) {
+        BlackmagicRawPipeline pipeline;
+        void* context = nullptr;
+        void* cmdQueue = nullptr;
+        MS_WARN(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
+        MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
+    }
     codec_.Reset();
     clip_.Reset();
     frames_ = 0;
@@ -441,11 +450,28 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         void* context = nullptr;
         void* cmdQueue = nullptr;
         MS_ENSURE(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
-        if ((copy_ || !pool_) && pipeline_ != blackmagicRawPipelineCUDA) { // GetResourceHostPointer does not work for cuda?
+        if (copy_) {// || !pool_) && pipeline_ != blackmagicRawPipelineCUDA) { // GetResourceHostPointer does not work for cuda?
+            MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0])); // metal can get host ptr?
+            if (!imageData[0]) { // cuda, ocl
+                if (!processedRes_) {
+                    processedType_ = type;
+                    MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteGPU, &processedRes_));
+                }
+                MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0]));
+                if (imageData[0])
+                    MS_ENSURE(resMgr_->CopyResource(context, cmdQueue, res, type, processedRes_, type, sizeBytes, false));
+            }
     // TODO: less copy via [MTLBuffer newBufferWithBytesNoCopy:length:options:deallocator:] from VideoFrame.buffer(0)
-            MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0]));
-            frame.setBuffers(imageData);
-        } else if (pipeline_ == blackmagicRawPipelineCUDA) {
+            //clog << fourcc_to_str(type) << " processedRes_ " << processedRes_ << " res " << res << " imageData: " << (void*)imageData[0] << endl;
+            if (imageData[0])
+                frame.setBuffers(imageData);
+        }
+    } else { // cpu
+        imageData[0] = (uint8_t*)res;
+        frame.setBuffers(imageData);
+    }
+    if (!imageData[0]) {
+        if (pipeline_ == blackmagicRawPipelineCUDA) {
 #if defined(__x86_64) || defined(AMD64) || defined(_M_AMD64) || (_LP64+0) > 0 || defined(__aarch64__)
 typedef unsigned long long CUdeviceptr;
 #else
@@ -496,9 +522,6 @@ typedef unsigned int CUdeviceptr;
             });
             frame.setNativeBuffer(nativeBuf);
         }
-    } else { // cpu
-        imageData[0] = (uint8_t*)res;
-        frame.setBuffers(imageData);
     }
 
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
