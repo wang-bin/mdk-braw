@@ -83,7 +83,7 @@ private:
     ComPtr<IBlackmagicRawClip> clip_;
     void* processedRes_ = nullptr; // gpu write cpu read in copy mode
     BlackmagicRawResourceType processedType_ = 0;
-    BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU; // TODO: 0 auto
+    BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU; // set by user only
     BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
     string deviceName_; // opencl device can be NVIDIA(adapter name?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
     PixelFormat format_ = PixelFormat::RGBA;
@@ -450,7 +450,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         void* context = nullptr;
         void* cmdQueue = nullptr;
         MS_ENSURE(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
-        if (copy_) {// || !pool_) && pipeline_ != blackmagicRawPipelineCUDA) { // GetResourceHostPointer does not work for cuda?
+        if (copy_) {// || !pool_) && type != blackmagicRawResourceTypeBufferCUDA) { // GetResourceHostPointer does not work for cuda?
             MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0])); // metal can get host ptr?
             if (!imageData[0]) { // cuda, ocl
                 if (!processedRes_) {
@@ -471,7 +471,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         frame.setBuffers(imageData);
     }
     if (!imageData[0]) {
-        if (pipeline_ == blackmagicRawPipelineCUDA) {
+        if (type == blackmagicRawResourceTypeBufferCUDA) {
 #if defined(__x86_64) || defined(AMD64) || defined(_M_AMD64) || (_LP64+0) > 0 || defined(__aarch64__)
 typedef unsigned long long CUdeviceptr;
 #else
@@ -567,15 +567,16 @@ bool BRawReader::setupPipeline()
         else if (best == blackmagicRawPipelineOpenCL && pipeline != blackmagicRawPipelineCPU)
             best = pipeline;
     } while (pit->Next() == S_OK);
-    if (!pipeline_)
-        pipeline_ = best;
+    auto pipeline_selected = pipeline_;
+    if (!pipeline_selected)
+        pipeline_selected = best;
     if (!found) {
         clog << "braw pipeline not found" << endl;
         return false;
     }
 
     ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
-    MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline_, interop_, &it), false); // TODO: none interop
+    MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline_selected, interop_, &it), false); // TODO: none interop
     do {
         BlackmagicRawInterop interop = 0;
         BlackmagicRawPipeline pipeline = blackmagicRawPipelineCPU;
@@ -604,7 +605,13 @@ bool BRawReader::setupPipeline()
     } while (it->Next() == S_OK); // crash if pipeline + interop is not supported
 
     if (!dev_) {
-        clog << "No device found for pipeline " << fourcc_to_str(pipeline_) << " + interop " << fourcc_to_str(interop_) << " + device " << deviceName_ << endl;
+        clog << "No device found for pipeline " << fourcc_to_str(pipeline_selected) << " + interop " << fourcc_to_str(interop_) << " + device " << deviceName_ << endl;
+        return false;
+    }
+
+    if (pipeline_ == 0 && pipeline_selected == blackmagicRawPipelineOpenCL) {
+        clog << "Auto selected OpenCL pipeline is not supported yet" << endl;
+        dev_.Reset();
         return false;
     }
 
@@ -615,7 +622,7 @@ bool BRawReader::setupPipeline()
     clog << "GetPreferredResourceFormat: " << to(bestFormat) << endl;
 
     codec_->PreparePipelineForDevice(dev_.Get(), nullptr);
-    if (pipeline_ == blackmagicRawPipelineCUDA)
+    if (pipeline_selected == blackmagicRawPipelineCUDA)
         pool_ = NativeVideoBufferPool::create("CUDA"); // better support d3d11/opengl/opengles
     else
         pool_ = NativeVideoBufferPool::create("BRAW"); // seems not work with cuda and opencl
