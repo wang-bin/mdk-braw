@@ -489,9 +489,9 @@ typedef unsigned int CUdeviceptr;
                 cuframe.cuptr[i] = CUdeviceptr(cuframe.cuptr[i-1] + cuframe.stride[i-1] * fmt.height(height, i-1));
                 cuframe.stride[i] = fmt.bytesPerLine(width, i);
             }
-            processedImage->AddRef();
+            //processedImage->AddRef();
             auto nativeBuf = pool_->getBuffer(&cuframe, [=]{
-                processedImage->Release();
+                //processedImage->Release(); // FIXME: invalid if braw objects are destroyed in unload()
             });
             if (copy_) {
                 NativeVideoBuffer::MapParameter mp;
@@ -511,14 +511,14 @@ typedef unsigned int CUdeviceptr;
             bb.gpuResource = res;
             bb.type = type;
             bb.device = dev_.Get();
-            bb.device->AddRef();
             bb.resMgr = resMgr_.Get();
-            bb.resMgr->AddRef();
             auto dev = bb.device;
             auto resMgr = bb.resMgr;
+            //dev->AddRef();
+            //resMgr->AddRef();
             auto nativeBuf = pool_->getBuffer(&bb, [=]{
-                dev->Release();
-                resMgr->Release();
+                //dev->Release();  // FIXME: invalid if braw objects are destroyed in unload()
+                //resMgr->Release();
             });
             frame.setNativeBuffer(nativeBuf);
         }
