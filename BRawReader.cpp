@@ -451,7 +451,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         void* context = nullptr;
         void* cmdQueue = nullptr;
         MS_ENSURE(processedImage->GetResourceContextAndCommandQueue(&context, &cmdQueue));
-        if (copy_) {// || !pool_) && type != blackmagicRawResourceTypeBufferCUDA) { // GetResourceHostPointer does not work for cuda?
+        if (copy_ || type == blackmagicRawResourceTypeBufferOpenCL || !pool_) {
             MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0])); // metal can get host ptr?
             if (!imageData[0]) { // cuda, ocl
                 if (!processedRes_) {
@@ -507,7 +507,7 @@ typedef unsigned int CUdeviceptr;
                 mp.height[0] = height;
                 mp.stride[0] = mp.stride[1] = cuframe.stride[0];
                 auto ma = static_cast<NativeVideoBuffer::MemoryArray*>(nativeBuf->map(NativeVideoBuffer::Type::HostMemory, &mp));
-                frame.setBuffers((const uint8_t **)ma->data, mp.stride); // TODO: no copy, frame.toHost()
+                frame.setBuffers((const uint8_t **)ma->data, mp.stride);
             } else {
                 frame.setNativeBuffer(nativeBuf);
             }
@@ -588,7 +588,7 @@ bool BRawReader::setupPipeline()
     }
 
     ComPtr<IBlackmagicRawPipelineDeviceIterator> it;
-    MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline_selected, interop_, &it), false); // TODO: none interop
+    MS_ENSURE(factory_->CreatePipelineDeviceIterator(pipeline_selected, interop_, &it), false);
     do {
         BlackmagicRawInterop interop = 0;
         BlackmagicRawPipeline pipeline = blackmagicRawPipelineCPU;
@@ -621,10 +621,8 @@ bool BRawReader::setupPipeline()
         return false;
     }
 
-    if (pipeline_ == 0 && pipeline_selected == blackmagicRawPipelineOpenCL) {
-        clog << "Auto selected OpenCL pipeline is not supported yet" << endl;
-        dev_.Reset();
-        return false;
+    if (pipeline_selected == blackmagicRawPipelineOpenCL && copy_ == 0) {
+        clog << "OpenCL does not support 0-copy, copy mode will be used" << endl;
     }
 
     ComPtr<IBlackmagicRawOpenGLInteropHelper> interop;
