@@ -15,6 +15,8 @@ struct BRawVideoBuffers
     int width;
     int height;
     PixelFormat format;
+    IBlackmagicRawProcessedImage *image;
+    uint32_t bytes;
     void* gpuResource;
     BlackmagicRawResourceType type;
     IBlackmagicRawPipelineDevice* device; // owned. must Release() in cleanup

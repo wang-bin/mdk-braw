@@ -82,11 +82,11 @@ private:
     ComPtr<IBlackmagicRawResourceManager> resMgr_;
     ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
-    void* processedRes_ = nullptr; // gpu write cpu read in copy mode
+    void* processedRes_ = nullptr; // cpu readable(gpu writable?) in copy mode
     BlackmagicRawResourceType processedType_ = 0;
     BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU; // set by user only
     BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
-    string deviceName_; // opencl device can be NVIDIA(adapter name?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
+    string deviceName_; // opencl device can be NVIDIA(adapter name? nv does not work and slow?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
     PixelFormat format_ = PixelFormat::RGBA;
     int copy_ = 0; // copy gpu resources
     BlackmagicRawResolutionScale scale_ = blackmagicRawResolutionScaleFull; // higher fps if scaled
@@ -257,7 +257,6 @@ bool BRawReader::load()
     MS_ENSURE(configEx->GetInstructionSet(&instruction), false);
     clog << "BlackmagicRawInstructionSet: " << fourcc_to_str(instruction) << endl;
 
-    // TODO: bstr_ptr
     BStr file(url().data());
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
 
@@ -429,9 +428,9 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     index_ = index;
 
     MS_ENSURE(result);// TODO: stop?
-    unsigned int width = 0;
-    unsigned int height = 0;
-    unsigned int sizeBytes = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t sizeBytes = 0;
     uint8_t const* imageData[3] = {};
     void* res = nullptr;
     BlackmagicRawResourceFormat f;
@@ -457,9 +456,11 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
             if (!imageData[0]) { // cuda, ocl
                 if (!processedRes_) {
                     processedType_ = type;
+                    clog << "try CPU readable GPU writable memory for " << fourcc_to_str(type) << endl;
                     MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteGPU, &processedRes_));
                     MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0])); // why host ptr is null?
                     if (!imageData[0]) {
+                        clog << "try CPU readable CPU writable memory for " << fourcc_to_str(type) << endl;
                         MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
                         MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteCPU, &processedRes_)); // processed image is on cpu readable memory?
                     }
@@ -515,6 +516,8 @@ typedef unsigned int CUdeviceptr;
             bb.width = width;
             bb.height = height;
             bb.format = fmt.format();
+            bb.image = processedImage;
+            bb.bytes = sizeBytes;
             bb.gpuResource = res;
             bb.type = type;
             bb.device = dev_.Get();
@@ -523,9 +526,11 @@ typedef unsigned int CUdeviceptr;
             auto resMgr = bb.resMgr;
             //dev->AddRef();
             //resMgr->AddRef();
+            //processedImage->AddRef();
             auto nativeBuf = pool_->getBuffer(&bb, [=]{
                 //dev->Release();  // FIXME: invalid if braw objects are destroyed in unload()
                 //resMgr->Release();
+                //processedImage->Release();
             });
             frame.setNativeBuffer(nativeBuf);
         }
@@ -675,7 +680,7 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
         } else if ("metal" == val) {
             pipeline_ = blackmagicRawPipelineMetal;
         } else if ("opencl" == val) {
-            pipeline_ = blackmagicRawPipelineOpenCL; // interop must be none on mac. black host image?
+            pipeline_ = blackmagicRawPipelineOpenCL; // interop must be none
         } else if ("cuda" == val) {
             pipeline_ = blackmagicRawPipelineCUDA;
         } else {

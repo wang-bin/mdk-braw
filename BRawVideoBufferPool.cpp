@@ -33,6 +33,12 @@ public:
         bufs.device->GetPipeline(&pipeline, &context, &cmdQueue);
         void* host = nullptr;
         bufs.resMgr->GetResourceHostPointer(context, cmdQueue, bufs.gpuResource, bufs.type, &host);
+        if (!host) {
+            if (!hostRes_) // FIXME: release
+                bufs.resMgr->CreateResource(context, cmdQueue, bufs.bytes, bufs.type, blackmagicRawResourceUsageReadCPUWriteCPU, &hostRes_);
+            bufs.resMgr->GetResourceHostPointer(context, cmdQueue, hostRes_, bufs.type, &host); // why host ptr is null?
+            bufs.resMgr->CopyResource(context, cmdQueue, bufs.gpuResource, bufs.type, hostRes_, bufs.type, bufs.bytes, false);
+        }
         if (!host)
             return false;
         VideoFormat fmt = bufs.format;
@@ -49,6 +55,7 @@ public:
 
 private:
     //friend class BRawVideoVideoBuffer; // access protected interop apis
+    void* hostRes_ = nullptr; // cpu readable
 };
 
 typedef shared_ptr<BRawVideoBufferPool> PoolRef;
