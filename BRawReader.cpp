@@ -55,7 +55,8 @@ public:
     void TrimComplete(IBlackmagicRawJob*, HRESULT) override {}
     void SidecarMetadataParseWarning(IBlackmagicRawClip*, BRawStr fileName, uint32_t lineNumber, BRawStr info) override {}
     void SidecarMetadataParseError(IBlackmagicRawClip*, BRawStr fileName, uint32_t lineNumber, BRawStr info) override {}
-    void PreparePipelineComplete(void*, HRESULT) override {
+    void PreparePipelineComplete(void*, HRESULT ret) override {
+        MS_WARN(ret);
         clog << MDK_FUNCINFO << endl;
     }
     // IUnknown
@@ -233,18 +234,21 @@ bool BRawReader::load()
     if (!factory_)
         return false;
     MS_ENSURE(factory_->CreateCodec(&codec_), false);
+    MS_ENSURE(codec_->SetCallback(this), false);
     ComPtr<IBlackmagicRawConfiguration> config;
     MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
 
     parseDecoderOptions();
 
-    if (threads_ > 0)
-        MS_ENSURE(config->SetCPUThreads(threads_), false);
 
     setupPipeline();
 
-    if (dev_)
-        MS_ENSURE(config->SetFromDevice(dev_.Get()), false);
+    if (dev_) {
+        MS_ENSURE(config->SetFromDevice(dev_.Get()), false); // ~ dev-GetPipeline(ctx,cmdQ) + cfg->SetPipeline(ctx, cmdQ)
+        MS_WARN(codec_->PreparePipelineForDevice(dev_.Get(), nullptr)); // speed-up the 1st frame
+    }
+    if (threads_ > 0)
+        MS_ENSURE(config->SetCPUThreads(threads_), false);
 
     ComPtr<IBlackmagicRawConfigurationEx> configEx;
     MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfigurationEx, (void**)&configEx), false);
@@ -256,7 +260,6 @@ bool BRawReader::load()
     // TODO: bstr_ptr
     BStr file(url().data());
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
-    MS_ENSURE(codec_->SetCallback(this), false);
 
     MediaEvent e{};
     e.category = "decoder.video";
@@ -446,16 +449,20 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     VideoFrame frame(width, height, fmt);
 
     if (type != blackmagicRawResourceTypeBufferCPU) {
-        BlackmagicRawPipeline pipeline;
         void* context = nullptr;
         void* cmdQueue = nullptr;
-        MS_ENSURE(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
+        MS_ENSURE(processedImage->GetResourceContextAndCommandQueue(&context, &cmdQueue));
         if (copy_) {// || !pool_) && type != blackmagicRawResourceTypeBufferCUDA) { // GetResourceHostPointer does not work for cuda?
             MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0])); // metal can get host ptr?
             if (!imageData[0]) { // cuda, ocl
                 if (!processedRes_) {
                     processedType_ = type;
                     MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteGPU, &processedRes_));
+                    MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0])); // why host ptr is null?
+                    if (!imageData[0]) {
+                        MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
+                        MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteCPU, &processedRes_)); // processed image is on cpu readable memory?
+                    }
                 }
                 MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0]));
                 if (imageData[0])
@@ -590,7 +597,7 @@ bool BRawReader::setupPipeline()
             if (SUCCEEDED(dev->GetName(&nameb)))
                 name = BStr::to_string(nameb);
         }
-        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", device: " << name << " - " << dev.Get();
+        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", device: '" << name << "' - " << dev.Get();
         if (!deviceName_.empty()) {
             transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c);});
             if (name.find(deviceName_) != string::npos) {
@@ -621,7 +628,6 @@ bool BRawReader::setupPipeline()
     MS_ENSURE(interop->GetPreferredResourceFormat(&bestFormat), false);
     clog << "GetPreferredResourceFormat: " << to(bestFormat) << endl;
 
-    codec_->PreparePipelineForDevice(dev_.Get(), nullptr);
     if (pipeline_selected == blackmagicRawPipelineCUDA)
         pool_ = NativeVideoBufferPool::create("CUDA"); // better support d3d11/opengl/opengles
     else
