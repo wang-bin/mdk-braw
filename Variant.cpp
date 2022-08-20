@@ -2,6 +2,7 @@
 #include "BStr.h"
 #include <algorithm>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 using namespace std;
 
@@ -53,7 +54,7 @@ string to_string(const VARIANT& v)
                 ss << ' ';
             switch (vt) {
             case blackmagicRawVariantTypeU8:
-                ss << static_cast<uint8_t*>(sad)[i];
+                ss << std::uppercase << std::setw(2) << std::setfill('0') << std::setbase(16) << (int)static_cast<uint8_t*>(sad)[i];
                 break;
             case blackmagicRawVariantTypeS16:
                 ss << static_cast<int16_t*>(sad)[i];
@@ -78,4 +79,63 @@ string to_string(const VARIANT& v)
         return {};
     }
     return ss.str();
+}
+
+var_ptr make_v(int16_t x)
+{
+    auto v = make_shared<VARIANT>();
+    VariantInit(v.get());
+    v->vt = blackmagicRawVariantTypeS16;
+    v->iVal = x;
+    return v;
+}
+
+var_ptr make_v(uint16_t x)
+{
+    auto v = make_shared<VARIANT>();
+    VariantInit(v.get());
+    v->vt = blackmagicRawVariantTypeU16;
+    v->uiVal = x;
+    return v;
+}
+
+var_ptr make_v(int32_t x)
+{
+    auto v = make_shared<VARIANT>();
+    VariantInit(v.get());
+    v->vt = blackmagicRawVariantTypeS32;
+    v->intVal = x;
+    return v;
+}
+
+var_ptr make_v(uint32_t x)
+{
+    auto v = make_shared<VARIANT>();
+    VariantInit(v.get());
+    v->vt = blackmagicRawVariantTypeU32;
+    v->uintVal = x;
+    return v;
+}
+
+var_ptr make_v(float x)
+{
+    auto v = make_shared<VARIANT>();
+    VariantInit(v.get());
+    v->vt = blackmagicRawVariantTypeFloat32;
+    v->fltVal = x;
+    return v;
+}
+
+var_ptr make_v(const string& x)
+{
+    auto bs = new BStr(x.data());
+    auto deleter = [bs](VARIANT* p) {
+        default_delete<VARIANT>{}(p);
+        delete bs;
+    };
+    auto v = var_ptr(new VARIANT(), deleter);
+    VariantInit(v.get());
+    v->vt = blackmagicRawVariantTypeString;
+    v->bstrVal = bs->get();
+    return v;
 }

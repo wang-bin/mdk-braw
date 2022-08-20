@@ -11,7 +11,7 @@ endif()
 project(mdk-braw VERSION 0.11.0 DESCRIPTION "mdk braw plugin") # LANGUAGES C CXX CXXPCH) # VERSION: cmake 3.0+
 set(PROJECT_VERSION_TWEAK 0)
 if(CMAKE_PROJECT_NAME STREQUAL mdk) # build in source tree
-    include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/video/hwa)
+    include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/video/hwa ${CMAKE_SOURCE_DIR})
 else()
   # TODO: FindMDKAbi
 endif()

@@ -2,7 +2,7 @@
  * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
-// TODO: attributes
+// TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
 #include "mdk/VideoFrame.h"
@@ -12,6 +12,7 @@
 #include "ComPtr.h"
 #include "BStr.h"
 #include "Variant.h"
+#include "base/Hash.h"
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
@@ -76,6 +77,8 @@ private:
         uint64_t index = 0;
         int seekId = 0;
         bool seekWaitFrame = true;
+        unordered_map<string,string> metadata;
+        unordered_map<string,string> attributes;
     };
 
     ComPtr<IBlackmagicRawFactory> factory_;
@@ -102,23 +105,151 @@ private:
     NativeVideoBufferPoolRef pool_;
 };
 
-void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip, IBlackmagicRawMetadataIterator* i)
+static string fourcc_to_str(uint32_t fcc)
 {
-    info.format = "braw";
-    if (i) {
-        BRawStr key;
-        while (SUCCEEDED(i->GetKey(&key))) {
-            VARIANT val;
-            VariantInit(&val);
-            if (FAILED(i->GetData(&val)))
-                break;
+    stringstream ss;
+    ss << std::hex << fcc << std::dec;
+    char t[] = { '\'', char((fcc>>24)&0xff), char((fcc>>16)&0xff),char((fcc>>8)&0xff),  char(fcc & 0xff), '\''};
+    for (auto i : t)
+        if (!i)
+            return ss.str();
+    return {t, std::size(t)};
+}
+
+static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&,const string&)>&& cb)
+{
+    ComPtr<IBlackmagicRawClipProcessingAttributes> a;
+    MS_ENSURE(clip->QueryInterface(IID_IBlackmagicRawClipProcessingAttributes, &a));
+
+    uint32_t count = 0;
+    bool ro = false;
+    if (SUCCEEDED(a->GetISOList(nullptr, &count, &ro))) { // from metadata?
+        vector<uint32_t> iso(count);
+        a->GetISOList(&iso[0], &count, &ro);
+        string vals;
+        for (auto i : iso)
+            vals += std::to_string(i) + ',';
+        cb("ISOList", vals);
+    }
+
+    VARIANT val;
+    VariantInit(&val);
+    VARIANT valMin, valMax;
+    VariantInit(&valMin);
+    VariantInit(&valMax);
+    for (auto i : {
+        blackmagicRawClipProcessingAttributeColorScienceGen          , //= /* 'csgn' */ 0x6373676E,	// u16
+        blackmagicRawClipProcessingAttributeGamma                    , //= /* 'gama' */ 0x67616D61,	// string
+        blackmagicRawClipProcessingAttributeGamut                    , //= /* 'gamt' */ 0x67616D74,	// string
+        blackmagicRawClipProcessingAttributeToneCurveContrast        , //= /* 'tcon' */ 0x74636F6E,	// float
+        blackmagicRawClipProcessingAttributeToneCurveSaturation      , //= /* 'tsat' */ 0x74736174,	// float
+        blackmagicRawClipProcessingAttributeToneCurveMidpoint        , //= /* 'tmid' */ 0x746D6964,	// float
+        blackmagicRawClipProcessingAttributeToneCurveHighlights      , //= /* 'thih' */ 0x74686968,	// float
+        blackmagicRawClipProcessingAttributeToneCurveShadows         , //= /* 'tsha' */ 0x74736861,	// float
+        blackmagicRawClipProcessingAttributeToneCurveVideoBlackLevel , //= /* 'tvbl' */ 0x7476626C,	// u16
+        blackmagicRawClipProcessingAttributeToneCurveBlackLevel      , //= /* 'tblk' */ 0x74626C6B,	// float
+        blackmagicRawClipProcessingAttributeToneCurveWhiteLevel      , //= /* 'twit' */ 0x74776974,	// float
+        blackmagicRawClipProcessingAttributeHighlightRecovery        , //= /* 'hlry' */ 0x686C7279,	// u16
+        blackmagicRawClipProcessingAttributeAnalogGainIsConstant     , //= /* 'agic' */ 0x61676963,	// u16
+        blackmagicRawClipProcessingAttributeAnalogGain               , //= /* 'gain' */ 0x6761696E,	// float
+        blackmagicRawClipProcessingAttributePost3DLUTMode            , //= /* 'lutm' */ 0x6C75746D,	// string
+        blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTName    , //= /* 'emln' */ 0x656D6C6E,	// string
+        blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTTitle   , //= /* 'emlt' */ 0x656D6C74,	// string
+        blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTSize    , //= /* 'emls' */ 0x656D6C73,	// u16
+        blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTData    , //= /* 'emld' */ 0x656D6C64,	// float array, size*size*size*3 elements
+        blackmagicRawClipProcessingAttributeSidecarPost3DLUTName     , //= /* 'scln' */ 0x73636C6E,	// string
+        blackmagicRawClipProcessingAttributeSidecarPost3DLUTTitle    , //= /* 'sclt' */ 0x73636C74,	// string
+        blackmagicRawClipProcessingAttributeSidecarPost3DLUTSize     , //= /* 'scls' */ 0x73636C73,	// u16
+        blackmagicRawClipProcessingAttributeSidecarPost3DLUTData     , //= /* 'scld' */ 0x73636C64,	// float array, size*size*size*3 elements
+        blackmagicRawClipProcessingAttributeGamutCompressionEnable   , //= /* 'gace' */ 0x67616365	// u16, 0=disabled, 1=enabled
+    }) {
+        if (SUCCEEDED(a->GetClipAttributeList(i, nullptr, &count, &ro))) {
+            vector<VARIANT> vars(count);
+            a->GetClipAttributeList(i, &vars[0], &count, &ro);
+            string vals;
+            for (const auto& v : vars) {
+                vals += to_string(v) + ',';
+            }
+            cb(fourcc_to_str(i) + ".list", vals);
+        } else if (SUCCEEDED(a->GetClipAttributeRange(i, &valMin, &valMax, &ro))) {
+            const auto vals = to_string(valMin) + '+' + to_string(valMax);
+            cb(fourcc_to_str(i) + ".range", vals);
+        }
+        if (SUCCEEDED(a->GetClipAttribute(i, &val))) {
             auto v = to_string(val);
             if (!v.empty())
-                info.metadata.emplace(BStr::to_string(key), v);
-            VariantClear(&val);
-            i->Next();
+                cb(fourcc_to_str(i), v);
         }
     }
+}
+
+static void get_attributes(IBlackmagicRawFrame* frame, unordered_map<string,string>& md)
+{
+    ComPtr<IBlackmagicRawFrameProcessingAttributes> a;
+    MS_ENSURE(frame->QueryInterface(IID_IBlackmagicRawFrameProcessingAttributes, &a));
+    VARIANT val;
+    VariantInit(&val);
+    VARIANT valMin, valMax;
+    VariantInit(&valMin);
+    VariantInit(&valMax);
+    uint32_t count = 0;
+    bool ro = false;
+    for (auto i : {
+        blackmagicRawFrameProcessingAttributeWhiteBalanceKelvin      , //= /* 'wbkv' */ 0x77626B76,	// u32
+        blackmagicRawFrameProcessingAttributeWhiteBalanceTint        , //= /* 'wbtn' */ 0x7762746E,	// s16
+        blackmagicRawFrameProcessingAttributeExposure                , //= /* 'expo' */ 0x6578706F,	// float
+        blackmagicRawFrameProcessingAttributeISO                     , //= /* 'fiso' */ 0x6669736F,	// u32. GetISOList or GetFrameAttributeList
+        blackmagicRawFrameProcessingAttributeAnalogGain              , //= /* 'agpf' */ 0x61677066	// float
+    }) {
+        if (SUCCEEDED(a->GetFrameAttributeList(i, nullptr, &count, &ro))) {
+            vector<VARIANT> vars(count);
+            a->GetFrameAttributeList(i, &vars[0], &count, &ro);
+            string vals;
+            for (const auto& v : vars) {
+                vals += to_string(v) + ',';
+            }
+            md.emplace(fourcc_to_str(i) + ".list", vals);
+        } else if (SUCCEEDED(a->GetFrameAttributeRange(i, &valMin, &valMax, &ro))) {
+            string vals = to_string(valMin) + '+' + to_string(valMax);
+            md.emplace(fourcc_to_str(i) + ".range", vals);
+            //clog << fourcc_to_str(i) + ".range: " + vals << endl;
+        }
+        if (SUCCEEDED(a->GetFrameAttribute(i, &val))) {
+            auto v = to_string(val);
+            if (!v.empty())
+                md.emplace(fourcc_to_str(i), v);
+            //clog << fourcc_to_str(i) + " = " + v << endl;
+        }
+    }
+}
+
+static void read_metadata(IBlackmagicRawMetadataIterator* i, unordered_map<string,string>& md)
+{
+    if (!i)
+        return;
+    BRawStr key;
+    while (SUCCEEDED(i->GetKey(&key))) {
+        VARIANT val;
+        VariantInit(&val);
+        if (FAILED(i->GetData(&val)))
+            break;
+        auto v = to_string(val);
+        if (!v.empty())
+            md.emplace(BStr::to_string(key), v);
+        VariantClear(&val);
+        i->Next();
+    }
+    //for (const auto& [k, v] : md)
+    //    clog << k << " = " << v << endl;
+}
+
+void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip)
+{
+    info.format = "braw";
+
+    ComPtr<IBlackmagicRawMetadataIterator> mdit;
+    if (SUCCEEDED(clip->GetMetadataIterator(&mdit)))
+        read_metadata(mdit.Get(), info.metadata);
 
     info.streams = 1;
     VideoCodecParameters vcp;
@@ -207,16 +338,6 @@ BlackmagicRawResourceFormat from(PixelFormat fmt)
     }
 }
 
-string fourcc_to_str(uint32_t fcc)
-{
-    stringstream ss;
-    ss << std::hex << fcc << std::dec;
-    char t[] = { '\'', char((fcc>>24)&0xff), char((fcc>>16)&0xff),char((fcc>>8)&0xff),  char(fcc & 0xff), '\''};
-    for (auto i : t)
-        if (!i)
-            return ss.str();
-    return {t, std::size(t)};
-}
 
 BRawReader::BRawReader()
     : FrameReader()
@@ -295,10 +416,8 @@ bool BRawReader::load()
         }
     }
 
-    ComPtr<IBlackmagicRawMetadataIterator> mdit;
-    MS_ENSURE(clip_->GetMetadataIterator(&mdit), false);
     MediaInfo info;
-    to(info, clip_, mdit.Get());
+    to(info, clip_);
     info.video[0].codec.format = format_;
     clog << info << endl;
     duration_ = info.video[0].duration;
@@ -307,6 +426,9 @@ bool BRawReader::load()
     changed(info); // may call seek for player.prepare(), duration_, frames_ and SetCallback() must be ready
     update(MediaStatus::Loaded);
 
+    get_attributes(clip_.Get(), [=](const string& k, const string& v){
+        setProperty(k, v);
+    });
     updateBufferingProgress(0);
 
     if (state() == State::Stopped) // start with pause
@@ -411,6 +533,12 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
     data->index = index;
     data->seekId = seekId;
     data->seekWaitFrame = seekWaitFrame;
+
+    ComPtr<IBlackmagicRawMetadataIterator> mit;
+    if (SUCCEEDED(frame->GetMetadataIterator(&mit)))
+        read_metadata(mit.Get(), data->metadata);
+    get_attributes(frame, data->attributes);
+
     decodeAndProcessJob->SetUserData(data);
     // will wait until submitted to gpu if using gpu decoder
     MS_ENSURE(decodeAndProcessJob->Submit(), delete data);
@@ -682,11 +810,16 @@ void BRawReader::parseDecoderOptions()
 
 void BRawReader::onPropertyChanged(const std::string& key, const std::string& val)
 {
-    if ("format" == key) {
+    const auto k = detail::fnv1a_32(key);
+    switch (k) {
+    case "format"_svh:
         format_ = VideoFormat::fromName(val.data());
-    } else if ("threads" == key) {
+        return;
+    case "threads"_svh:
         threads_ = stoi(val);
-    } else if ("gpu" == key || "pipeline" == key) {
+        return;
+    case "gpu"_svh:
+    case "pipeline"_svh: {
         if ("auto"sv == val) { // metal > cuda > opencl > cpu
             pipeline_ = 0;
         } else if ("metal" == val) {
@@ -698,17 +831,20 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
         } else {
             pipeline_ = blackmagicRawPipelineCPU;
         }
-    } else if ("interop" == key) {
-        if (val == "opengl")
-            interop_ = blackmagicRawInteropOpenGL;
-        else
-            interop_ = blackmagicRawInteropNone;
-    } else if ("device" == key) {
+    }
+        return;
+    case "interop"_svh:
+        interop_ = val == "opengl" ? blackmagicRawInteropOpenGL : blackmagicRawInteropNone;
+        return;
+    case "device"_svh:
         deviceName_ = val;
         transform(deviceName_.begin(), deviceName_.end(), deviceName_.begin(), [](unsigned char c){ return std::tolower(c);});
-    } else if ("copy" == key) {
+        return;
+    case "copy"_svh:
         copy_ = stoi(val);
-    } else if ("scale" == key || "size" == key) { // widthxheight or width(height=width)
+        return;
+    case "scale"_svh:
+    case "size"_svh: { // widthxheight or width(height=width)
         if (val.find('x') != string::npos) { // closest scale to target resolution
             char* s = nullptr;
             scaleToW_ = strtoul(val.data(), &s, 10);
@@ -719,6 +855,9 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
             scaleToH_ = scaleToW_;
         }
     }
+        return;
+    }
+    // TODO: if property is a clip attribute and exists, guess VARIANT then SetClipAttribute(). if not exist, insert only
 }
 
 
