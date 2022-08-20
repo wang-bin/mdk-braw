@@ -35,6 +35,8 @@
 #else
 # include <dlfcn.h>
 #endif
+#include <iostream>
+using namespace std;
 
 #define BRAW_ARG0() (), (), ()
 #define BRAW_ARG1(P1) (P1), (P1 p1), (p1)
@@ -45,7 +47,7 @@
 #define BRAW_API_EXPAND(EXPR) EXPR
 #define BRAW_API_EXPAND_T_V(R, F, ARG_T, ARG_T_V, ARG_V) \
     R F ARG_T_V { \
-        static auto fp = (decltype(&F))dlsym(load_BlackmagicRawAPI(), #F); \
+        static auto fp = (decltype(&F))dlsym(load_once(), #F); \
         assert(fp && "BlackmagicRaw API NOT FOUND: " #F); \
         return fp ARG_V; \
     }
@@ -60,6 +62,7 @@ CFBundleRef load_bundle(const char* fwkName)
             CFRelease(name);
             CFRelease(url);
             if (fwkUrl) {
+                clog << "braw bundle url: " << CFStringGetCStringPtr(CFStringCreateWithFormat(nullptr, nullptr, CFSTR("%@"), (CFTypeRef)fwkUrl), kCFStringEncodingUTF8) << endl;
                 auto b = CFBundleCreate(kCFAllocatorDefault, fwkUrl);
                 CFRelease(fwkUrl);
                 return b;
@@ -70,7 +73,7 @@ CFBundleRef load_bundle(const char* fwkName)
 }
 #endif
 
-static auto load_BlackmagicRawAPI(const char* mod = nullptr)
+static auto load_once(const char* mod = nullptr)
 {
     const auto name_default =
 #if (_WIN32+0)
@@ -81,7 +84,10 @@ static auto load_BlackmagicRawAPI(const char* mod = nullptr)
         "libBlackmagicRawAPI.so"
 #endif
         ;
-    return dlopen(name_default, RTLD_NOW | RTLD_LOCAL);
+    static auto dso = dlopen(name_default, RTLD_NOW | RTLD_LOCAL);
+    if (!dso)
+        clog << "Failed to load " << name_default << endl;
+    return dso;
 }
 
 extern "C" {
