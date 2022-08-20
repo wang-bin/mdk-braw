@@ -41,6 +41,7 @@ using namespace std;
 #define BRAW_ARG0() (), (), ()
 #define BRAW_ARG1(P1) (P1), (P1 p1), (p1)
 #define BRAW_ARG2(P1, P2) (P1, P2), (P1 p1, P2 p2), (p1, p2)
+#define BRAW_ARG3(P1, P2, P3) (P1, P2, P3), (P1 p1, P2 p2, P3 p3), (p1, p2, p3)
 
 
 #define _BRAW_API(R, NAME, ...) BRAW_API_EXPAND(BRAW_API_EXPAND_T_V(R, NAME, __VA_ARGS__))
@@ -92,4 +93,15 @@ static auto load_once(const char* mod = nullptr)
 
 extern "C" {
 _BRAW_API(IBlackmagicRawFactory*, CreateBlackmagicRawFactoryInstance, BRAW_ARG0())
+#ifndef _WIN32
+_BRAW_API(HRESULT, VariantInit, BRAW_ARG1(Variant*))
+_BRAW_API(HRESULT, VariantClear, BRAW_ARG1(Variant*))
+_BRAW_API(SafeArray*, SafeArrayCreate, BRAW_ARG3(BlackmagicRawVariantType, uint32_t, SafeArrayBound*))
+_BRAW_API(HRESULT, SafeArrayGetVartype, BRAW_ARG2(SafeArray*, BlackmagicRawVariantType*))
+_BRAW_API(HRESULT, SafeArrayGetLBound, BRAW_ARG3(SafeArray*, uint32_t, long*))
+_BRAW_API(HRESULT, SafeArrayGetUBound, BRAW_ARG3(SafeArray*, uint32_t, long*))
+_BRAW_API(HRESULT, SafeArrayAccessData, BRAW_ARG2(SafeArray*, void**))
+_BRAW_API(HRESULT, SafeArrayUnaccessData, BRAW_ARG1(SafeArray*))
+_BRAW_API(HRESULT, SafeArrayDestroy, BRAW_ARG1(SafeArray*))
+#endif
 }

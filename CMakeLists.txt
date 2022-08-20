@@ -43,6 +43,7 @@ add_library(${PROJECT_NAME} MODULE
     BRawAPILoader.cpp
     BRawVideoBufferPool.cpp
     BRawGLInterop.cpp
+    Variant.cpp
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES

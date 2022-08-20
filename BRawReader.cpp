@@ -2,7 +2,7 @@
  * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
-// TODO: metadata, attributes
+// TODO: attributes
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
 #include "mdk/VideoFrame.h"
@@ -11,6 +11,7 @@
 #include "BRawVideoBufferPool.h"
 #include "ComPtr.h"
 #include "BStr.h"
+#include "Variant.h"
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
@@ -104,7 +105,20 @@ private:
 void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip, IBlackmagicRawMetadataIterator* i)
 {
     info.format = "braw";
-    // TODO: metadata
+    if (i) {
+        BRawStr key;
+        while (SUCCEEDED(i->GetKey(&key))) {
+            VARIANT val;
+            VariantInit(&val);
+            if (FAILED(i->GetData(&val)))
+                break;
+            auto v = to_string(val);
+            if (!v.empty())
+                info.metadata.emplace(BStr::to_string(key), v);
+            VariantClear(&val);
+            i->Next();
+        }
+    }
 
     info.streams = 1;
     VideoCodecParameters vcp;
@@ -522,8 +536,8 @@ typedef unsigned int CUdeviceptr;
             bb.type = type;
             bb.device = dev_.Get();
             bb.resMgr = resMgr_.Get();
-            auto dev = bb.device;
-            auto resMgr = bb.resMgr;
+            //auto dev = bb.device;
+            //auto resMgr = bb.resMgr;
             //dev->AddRef();
             //resMgr->AddRef();
             //processedImage->AddRef();

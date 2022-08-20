@@ -52,6 +52,7 @@
 
 #if (_WIN32 + 0)
 #include <comutil.h>
+#include <oleauto.h> // VARIANT
 //#include <wtype.h> // BSTR
 typedef BSTR BRawStr;
 struct CFUUIDBytes {
@@ -115,17 +116,30 @@ BMD_CONST REFIID IID_IBlackmagicRawClipResolutions                = /* 3070805E-
 
 /* Enum BlackmagicRawVariantType - Variant types that may be stored as metadata */
 
+#ifndef _WIN32
+enum {
+    VT_EMPTY = 0,
+    VT_UI1 = 1,
+    VT_I2 = 2,
+    VT_UI2 = 3,
+    VT_I4 = 4,
+    VT_UI4 = 5,
+    VT_R4 = 6,
+    VT_BSTR = 7,
+    VT_SAFEARRAY = 8,
+};
+#endif
 typedef uint32_t BlackmagicRawVariantType;
 enum _BlackmagicRawVariantType {
-    blackmagicRawVariantTypeEmpty                                = 0,
-    blackmagicRawVariantTypeU8                                   = 1,
-    blackmagicRawVariantTypeS16                                  = 2,
-    blackmagicRawVariantTypeU16                                  = 3,
-    blackmagicRawVariantTypeS32                                  = 4,
-    blackmagicRawVariantTypeU32                                  = 5,
-    blackmagicRawVariantTypeFloat32                              = 6,
-    blackmagicRawVariantTypeString                               = 7,
-    blackmagicRawVariantTypeSafeArray                            = 8
+    blackmagicRawVariantTypeEmpty                                = VT_EMPTY,
+    blackmagicRawVariantTypeU8                                   = VT_UI1,
+    blackmagicRawVariantTypeS16                                  = VT_I2,
+    blackmagicRawVariantTypeU16                                  = VT_UI2,
+    blackmagicRawVariantTypeS32                                  = VT_I4,
+    blackmagicRawVariantTypeU32                                  = VT_UI4,
+    blackmagicRawVariantTypeFloat32                              = VT_R4,
+    blackmagicRawVariantTypeString                               = VT_BSTR,
+    blackmagicRawVariantTypeSafeArray                            = VT_SAFEARRAY,
 };
 
 /* Enum BlackmagicRawResourceType - Used in IBlackmagicRawResourceManager */
@@ -287,6 +301,10 @@ class IBlackmagicRawClipResolutions;
 
 /* Struct SafeArrayBound - Dimensionality of a SafeArray */
 
+#ifdef _WIN32
+using SafeArray =  SAFEARRAY;
+using SafeArrayBound = SAFEARRAYBOUND;
+#else
 struct SafeArrayBound
 {
     uint32_t lLbound;
@@ -320,6 +338,9 @@ struct Variant
         SafeArray* parray;
     };
 };
+using VARIANT = Variant;
+using VARTYPE = BlackmagicRawVariantType;
+#endif
 
 /* Interface IBlackmagicRaw - A single codec instance */
 
@@ -474,7 +495,7 @@ class BMD_PUBLIC IBlackmagicRawMetadataIterator : public IUnknown
 public:
     virtual HRESULT Next (void) = 0;	// When at last entry, calling Next() will return S_FALSE
     virtual HRESULT GetKey (/* out */ BRawStr* key) = 0;
-    virtual HRESULT GetData (/* out */ Variant* data) = 0;
+    virtual HRESULT GetData (/* out */ VARIANT* data) = 0;
 
 protected:
     virtual ~IBlackmagicRawMetadataIterator () {} // call Release method to drop reference count
@@ -485,10 +506,10 @@ protected:
 class BMD_PUBLIC IBlackmagicRawClipProcessingAttributes : public IUnknown
 {
 public:
-    virtual HRESULT GetClipAttribute (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* out */ Variant* value) = 0;
-    virtual HRESULT SetClipAttribute (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* in */ Variant* value) = 0;
-    virtual HRESULT GetClipAttributeRange (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* out */ Variant* valueMin, /* out */ Variant* valueMax, /* out */ bool* isReadOnly) = 0;
-    virtual HRESULT GetClipAttributeList (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* out */ Variant* array /* optional */, /* out */ uint32_t* arrayElementCount /* optional */, /* out */ bool* isReadOnly) = 0;
+    virtual HRESULT GetClipAttribute (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* out */ VARIANT* value) = 0;
+    virtual HRESULT SetClipAttribute (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* in */ VARIANT* value) = 0;
+    virtual HRESULT GetClipAttributeRange (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* out */ VARIANT* valueMin, /* out */ VARIANT* valueMax, /* out */ bool* isReadOnly) = 0;
+    virtual HRESULT GetClipAttributeList (/* in */ BlackmagicRawClipProcessingAttribute attribute, /* out */ VARIANT* array /* optional */, /* out */ uint32_t* arrayElementCount /* optional */, /* out */ bool* isReadOnly) = 0;
     virtual HRESULT GetISOList (/* out */ uint32_t* array /* optional */, /* in, out */ uint32_t* arrayElementCount /* optional */, /* out */ bool* isReadOnly) = 0;
     virtual HRESULT GetPost3DLUT (/* out */ IBlackmagicRawPost3DLUT** lut) = 0;
 
@@ -501,10 +522,10 @@ protected:
 class BMD_PUBLIC IBlackmagicRawFrameProcessingAttributes : public IUnknown
 {
 public:
-    virtual HRESULT GetFrameAttribute (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* out */ Variant* value) = 0;
-    virtual HRESULT SetFrameAttribute (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* in */ Variant* value) = 0;
-    virtual HRESULT GetFrameAttributeRange (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* out */ Variant* valueMin, /* out */ Variant* valueMax, /* out */ bool* isReadOnly) = 0;
-    virtual HRESULT GetFrameAttributeList (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* out */ Variant* array /* optional */, /* out */ uint32_t* arrayElementCount /* optional */, /* out */ bool* isReadOnly) = 0;
+    virtual HRESULT GetFrameAttribute (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* out */ VARIANT* value) = 0;
+    virtual HRESULT SetFrameAttribute (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* in */ VARIANT* value) = 0;
+    virtual HRESULT GetFrameAttributeRange (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* out */ VARIANT* valueMin, /* out */ VARIANT* valueMax, /* out */ bool* isReadOnly) = 0;
+    virtual HRESULT GetFrameAttributeList (/* in */ BlackmagicRawFrameProcessingAttribute attribute, /* out */ VARIANT* array /* optional */, /* out */ uint32_t* arrayElementCount /* optional */, /* out */ bool* isReadOnly) = 0;
     virtual HRESULT GetISOList (/* out */ uint32_t* array /* optional */, /* in, out */ uint32_t* arrayElementCount /* optional */, /* out */ bool* isReadOnly) = 0;
 
 protected:
@@ -628,8 +649,8 @@ public:
     virtual HRESULT GetFrameIndex (/* out */ uint64_t* frameIndex) = 0;
     virtual HRESULT GetTimecode (/* out */ BRawStr* timecode) = 0;
     virtual HRESULT GetMetadataIterator (/* out */ IBlackmagicRawMetadataIterator** iterator) = 0;
-    virtual HRESULT GetMetadata (/* in */ BRawStr key, /* out */ Variant* value) = 0;
-    virtual HRESULT SetMetadata (/* in */ BRawStr key, /* in */ Variant* value) = 0;	// To clear metadata to movie original, set value to NULL. This data is not saved to disk until SaveSideCar() is called
+    virtual HRESULT GetMetadata (/* in */ BRawStr key, /* out */ VARIANT* value) = 0;
+    virtual HRESULT SetMetadata (/* in */ BRawStr key, /* in */ VARIANT* value) = 0;	// To clear metadata to movie original, set value to NULL. This data is not saved to disk until SaveSideCar() is called
     virtual HRESULT CloneFrameProcessingAttributes (/* out */ IBlackmagicRawFrameProcessingAttributes** frameProcessingAttributes) = 0;	// creates object with current frame processing attributes
     virtual HRESULT SetResolutionScale (/* in */ BlackmagicRawResolutionScale resolutionScale) = 0;
     virtual HRESULT GetResolutionScale (/* out */ BlackmagicRawResolutionScale* resolutionScale) = 0;
@@ -700,8 +721,8 @@ public:
     virtual HRESULT GetFrameCount (/* out */ uint64_t* frameCount) = 0;
     virtual HRESULT GetTimecodeForFrame (/* in */ uint64_t frameIndex, /* out */ BRawStr* timecode) = 0;
     virtual HRESULT GetMetadataIterator (/* out */ IBlackmagicRawMetadataIterator** iterator) = 0;
-    virtual HRESULT GetMetadata (/* in */ BRawStr key, /* out */ Variant* value) = 0;
-    virtual HRESULT SetMetadata (/* in */ BRawStr key, /* in */ Variant* value) = 0;	// To clear metadata to movie original, set value to NULL. This data is not saved to disk until SaveSideCar() is called
+    virtual HRESULT GetMetadata (/* in */ BRawStr key, /* out */ VARIANT* value) = 0;
+    virtual HRESULT SetMetadata (/* in */ BRawStr key, /* in */ VARIANT* value) = 0;	// To clear metadata to movie original, set value to NULL. This data is not saved to disk until SaveSideCar() is called
     virtual HRESULT GetCameraType (/* out */ BRawStr* cameraType) = 0;
     virtual HRESULT CloneClipProcessingAttributes (/* out */ IBlackmagicRawClipProcessingAttributes** clipProcessingAttributes) = 0;	// creates object with current clip processing attributes
     virtual HRESULT GetMulticardFileCount (/* out */ uint32_t* multicardFileCount) = 0;
@@ -752,8 +773,8 @@ extern "C" {
 #ifndef _WIN32
     BMD_PUBLIC IBlackmagicRawFactory* CreateBlackmagicRawFactoryInstanceFromPath(/* in */ BRawStr loadPath);
     BMD_PUBLIC IBlackmagicRawFactory* CreateBlackmagicRawFactoryInstanceFromExeRelativePath(/* in */ BRawStr loadPath);
-    BMD_PUBLIC HRESULT VariantInit(/* in */ Variant* variant);
-    BMD_PUBLIC HRESULT VariantClear(/* in */ Variant* variant);
+    BMD_PUBLIC HRESULT VariantInit(/* in */ VARIANT* variant);
+    BMD_PUBLIC HRESULT VariantClear(/* in */ VARIANT* variant);
     BMD_PUBLIC SafeArray* SafeArrayCreate(/* in */ BlackmagicRawVariantType variantType, /* in */ uint32_t dimensions, /* in */ SafeArrayBound* safeArrayBound);
     BMD_PUBLIC HRESULT SafeArrayGetVartype(/* in */ SafeArray* safeArray, /* out */ BlackmagicRawVariantType* variantType);
     BMD_PUBLIC HRESULT SafeArrayGetLBound(/* in */ SafeArray* safeArray, /* in */ uint32_t dimensions, /* out */ long* lBound);

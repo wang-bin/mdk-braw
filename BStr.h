@@ -29,9 +29,14 @@ public:
         std::snprintf(&cs[0], cs.size() + 1, "%ls", s);
         return cs;
 #elif (__APPLE__ + 0)
-        if (auto cs = CFStringGetCStringPtr(s, kCFStringEncodingUTF8); cs)
+        if (auto cs = CFStringGetCStringPtr(s, kCFStringEncodingUTF8))
             return cs;
-        return {};
+        const auto utf16length = CFStringGetLength(s);
+        const auto maxUtf8len = CFStringGetMaximumSizeForEncoding(utf16length, kCFStringEncodingUTF8);
+        std::string u8s(maxUtf8len, 0);
+        CFStringGetCString(s, u8s.data(), maxUtf8len, kCFStringEncodingUTF8);
+        u8s.resize(strlen(u8s.data()));
+        return u8s;
 #else
         return s;
 #endif
