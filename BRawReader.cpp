@@ -3,6 +3,7 @@
  * braw plugin for libmdk
  */
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
+// TODO: save sidecar, trim clip
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
 #include "mdk/VideoFrame.h"
@@ -478,10 +479,10 @@ bool BRawReader::seekTo(int64_t msec, SeekFlag flag, int id)
             seekComplete(duration_ * index_ / frames_, id);
             return true;
         }
-        index = clamp<uint64_t>(index_ + msec, 0, frames_ - 1);
+        index = (uint64_t)clamp<int64_t>((int64_t)index_ + msec, 0, frames_ - 1);
     }
     seeking_++;
-    clog << seeking_ << " Seek to index: " << index << endl;
+    clog << seeking_ << " Seek to index: " << index << " from " << index_<< endl;
     updateBufferingProgress(0);
     IBlackmagicRawJob* job = nullptr;
     MS_ENSURE(clip_->CreateJobReadFrame(index, &job), false);
@@ -558,6 +559,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         seekWaitFrame = data->seekWaitFrame;
         delete data;
     }
+    index_ = index; // update index_ before seekComplete because pending seek may be executed in seekCompleted
     if (seekId > 0 && seekWaitFrame) {
         seeking_--;
         if (seeking_ > 0 && seekId == 0) {
@@ -567,7 +569,6 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         }
         seekComplete(duration_ * index / frames_, seekId); // may create a new seek
     }
-    index_ = index;
 
     MS_ENSURE(result);// TODO: stop?
     uint32_t width = 0;
@@ -680,6 +681,7 @@ typedef unsigned int CUdeviceptr;
 
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
     frame.setDuration((double)duration_/(double)frames_ / 1000.0);
+    // FIXME: stop playback in onFrame() callback results in dead lock in braw(FlushJobs will wait this function finished)
     if (seekId > 0) {
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
     }
