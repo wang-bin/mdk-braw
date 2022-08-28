@@ -30,7 +30,7 @@
 #elif defined(__APPLE__)
 # include <CoreFoundation/CoreFoundation.h>
 # define dlopen(filename, flags) load_bundle(filename)
-# define dlsym(handle, symbol) CFBundleGetFunctionPointerForName(handle, CFSTR(symbol))
+# define dlsym(handle, symbol) (handle ? CFBundleGetFunctionPointerForName(handle, CFSTR(symbol)) : nullptr)
 # define dlclose(handle) CFRelease(handle)
 #else
 # include <dlfcn.h>
@@ -49,9 +49,13 @@ using namespace std;
 #define BRAW_API_EXPAND_T_V(R, F, ARG_T, ARG_T_V, ARG_V) \
     R F ARG_T_V { \
         static auto fp = (decltype(&F))dlsym(load_once(), #F); \
-        assert(fp && "BlackmagicRaw API NOT FOUND: " #F); \
+        if (!fp) \
+            return default_rv<R>(); \
         return fp ARG_V; \
     }
+
+template<typename T> T default_rv() {return {};}
+template<> void default_rv<void>() {}
 
 #if (__APPLE__ + 0)
 CFBundleRef load_bundle(const char* fwkName)
@@ -74,6 +78,15 @@ CFBundleRef load_bundle(const char* fwkName)
 }
 #endif
 
+inline string to_string(const wchar_t* ws)
+{
+    string s(snprintf(nullptr, 0, "%ls", ws), 0);
+    snprintf(&s[0], s.size() + 1, "%ls", ws);
+    return s;
+}
+
+inline string to_string(const char* s) { return s;}
+
 static auto load_once(const char* mod = nullptr)
 {
     const auto name_default =
@@ -87,7 +100,7 @@ static auto load_once(const char* mod = nullptr)
         ;
     static auto dso = dlopen(name_default, RTLD_NOW | RTLD_LOCAL);
     if (!dso)
-        clog << "Failed to load " << name_default << endl;
+        clog << "Failed to load BRAW runtime: " << to_string(name_default) << endl; // FIXME: wstring
     return dso;
 }
 
