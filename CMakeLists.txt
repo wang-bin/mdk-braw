@@ -1,14 +1,13 @@
-# defines var ffmpeg_dso: the ffmpeg single runtime file path
 cmake_minimum_required(VERSION 3.1)
 if(POLICY CMP0025)
 # MUST call before project() and enable_language
-  cmake_policy(SET CMP0025 NEW) # since 3.0, prefer AppleClang instead of Clang. FIXME: ios is still Clang
+  cmake_policy(SET CMP0025 NEW) # since 3.0, prefer AppleClang instead of Clang.
 endif()
 if(POLICY CMP0063) # visibility. since 3.3
   cmake_policy(SET CMP0063 NEW)
 endif()
 
-project(mdk-braw VERSION 0.11.0 DESCRIPTION "mdk braw plugin") # LANGUAGES C CXX CXXPCH) # VERSION: cmake 3.0+
+project(mdk-braw VERSION 0.16.0 DESCRIPTION "mdk braw plugin")
 set(PROJECT_VERSION_TWEAK 0)
 if(CMAKE_PROJECT_NAME STREQUAL mdk) # build in source tree
     include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/video/hwa ${CMAKE_SOURCE_DIR})
