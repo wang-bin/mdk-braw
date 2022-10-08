@@ -7,14 +7,14 @@
 #include <string>
 #include <string.h>
 #if (_WIN32 + 0)
-# include <comutil.h>
+# include <oleauto.h>
 #endif
 
 class BStr
 {
 public:
 #if (_WIN32 + 0)
-    using StrTye = BSTR; // WCHAR
+    using StrTye = BSTR; // WCHAR*: length prefix + data string + 0x0000
 #elif (__APPLE__ + 0)
     using StrTye = CFStringRef;
 #else
@@ -26,7 +26,7 @@ public:
             return {};
 #if (_WIN32 + 0)
         std::string cs(std::snprintf(nullptr, 0, "%ls", s), 0);
-        std::snprintf(&cs[0], cs.size() + 1, "%ls", s);
+        std::snprintf(&cs[0], cs.size() + 1, "%ls", s); // TODO: code page?
         return cs;
 #elif (__APPLE__ + 0)
         if (auto cs = CFStringGetCStringPtr(s, kCFStringEncodingUTF8))
@@ -42,11 +42,14 @@ public:
 #endif
     }
 
-    BStr(const char* s) {
+    BStr(const char* s/*utf8*/) {
         if (!s)
             return;
 #if (_WIN32 + 0)
-        s_ = s;
+        const auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, strlen(s), nullptr, 0); // including null terminator
+        std::wstring ws(wlen, 0);
+        MultiByteToWideChar(CP_UTF8, 0, s, strlen(s), &ws[0], ws.size());
+        s_ = SysAllocString(ws.data());
 #elif (__APPLE__ + 0)
         s_ = CFStringCreateWithCString(nullptr, s, kCFStringEncodingUTF8);
 #else
@@ -71,20 +74,7 @@ public:
     }
 
     StrTye get() {
-#if (_WIN32 + 0)
-        return s_.GetBSTR();
-#else
         return s_;
-#endif
-    }
-
-    StrTye *operator&() {
-#if (_WIN32 + 0)
-        return s_.GetAddress();
-#else
-        release();
-        return &s_;
-#endif
     }
 
 private:
@@ -92,17 +82,14 @@ private:
         if (!s_)
             return;
 #if (_WIN32 + 0)
-        s_ = _bstr_t();
+        SysFreeString(s_);
 #elif (__APPLE__ + 0)
         CFRelease(s_);
 #else
         free(s_);
 #endif
+        s_ = {};
     }
 
-#if (_WIN32 + 0)
-    _bstr_t s_;
-#else
     StrTye s_{};
-#endif
 };

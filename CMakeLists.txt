@@ -38,7 +38,7 @@ if(APPLE)
   # set rpath
 elseif(WIN32)
   target_sources(${PROJECT_NAME} PRIVATE BRawD3D11Interop.cpp)
-  target_link_libraries(${PROJECT_NAME} PRIVATE comsuppw d3d11) # _bstr_t
+  target_link_libraries(${PROJECT_NAME} PRIVATE OleAut32 d3d11)
 else()
   target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 endif()
