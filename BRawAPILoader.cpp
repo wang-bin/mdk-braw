@@ -30,7 +30,7 @@
 #elif defined(__APPLE__)
 # include <CoreFoundation/CoreFoundation.h>
 # define dlopen(filename, flags) load_bundle(filename)
-# define dlsym(handle, symbol) (handle ? CFBundleGetFunctionPointerForName(handle, CFSTR(symbol)) : nullptr)
+# define dlsym(handle, symbol) ((handle) ? CFBundleGetFunctionPointerForName(handle, CFSTR(symbol)) : nullptr)
 # define dlclose(handle) CFRelease(handle)
 #else
 # include <dlfcn.h>
@@ -54,7 +54,7 @@ using namespace std;
         return fp ARG_V; \
     }
 
-template<typename T> T default_rv() {return {};}
+template<typename T> static T default_rv() {return {};}
 template<> void default_rv<void>() {}
 
 #if (__APPLE__ + 0)
@@ -67,7 +67,9 @@ CFBundleRef load_bundle(const char* fwkName)
             CFRelease(name);
             CFRelease(url);
             if (fwkUrl) {
-                clog << "braw bundle url: " << CFStringGetCStringPtr(CFStringCreateWithFormat(nullptr, nullptr, CFSTR("%@"), (CFTypeRef)fwkUrl), kCFStringEncodingUTF8) << endl;
+                auto s = CFStringCreateWithFormat(nullptr, nullptr, CFSTR("%@"), (CFTypeRef)fwkUrl);
+                clog << "braw bundle url: " << CFStringGetCStringPtr(s, kCFStringEncodingUTF8) << endl;
+                CFRelease(s);
                 auto b = CFBundleCreate(kCFAllocatorDefault, fwkUrl);
                 CFRelease(fwkUrl);
                 return b;
@@ -87,7 +89,7 @@ inline string to_string(const wchar_t* ws)
 
 inline string to_string(const char* s) { return s;}
 
-static auto load_once(const char* mod = nullptr)
+static auto load_once()
 {
     const auto name_default =
 #if (_WIN32+0)
@@ -100,7 +102,7 @@ static auto load_once(const char* mod = nullptr)
         ;
     static auto dso = dlopen(name_default, RTLD_NOW | RTLD_LOCAL);
     if (!dso)
-        clog << "Failed to load BRAW runtime: " << to_string(name_default) << endl; // FIXME: wstring
+        clog << "Failed to load BRAW runtime: " << to_string(name_default) << endl;
     return dso;
 }
 
