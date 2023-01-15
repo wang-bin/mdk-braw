@@ -165,10 +165,12 @@ endif()
 include(FindPackageHandleStandardArgs)
 
 if(CMAKE_PROJECT_NAME STREQUAL mdk)
+  if(NOT TARGET LibmdkAbi)
     add_library(LibmdkAbi INTERFACE)
     target_include_directories(LibmdkAbi INTERFACE ${MDK_ABI_INCLUDE_DIRS} ${MDK_SOURCE_DIR}/external/include)
     target_link_libraries(LibmdkAbi INTERFACE mdk)
-    return()
+  endif()
+  return()
 endif()
 
 add_library(LibmdkAbi SHARED IMPORTED)

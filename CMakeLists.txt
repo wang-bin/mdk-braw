@@ -7,7 +7,7 @@ endif()
 project(mdk-braw VERSION 0.16.0 DESCRIPTION "mdk braw plugin")
 set(PROJECT_VERSION_TWEAK 0)
 if(CMAKE_PROJECT_NAME STREQUAL mdk) # build in source tree
-    include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/video/hwa ${CMAKE_SOURCE_DIR})
+    include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/video/interop ${CMAKE_SOURCE_DIR})
 endif()
 
 find_package(Threads)
