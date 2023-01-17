@@ -1,8 +1,9 @@
 /*
- * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
+// hdr (gamma, gamut) attributes
 // TODO: save sidecar, trim clip
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
@@ -28,7 +29,7 @@ using namespace Microsoft::WRL; //ComPtr
 #define MS_ENSURE(f, ...) MS_CHECK(f, return __VA_ARGS__;)
 #define MS_WARN(f) MS_CHECK(f)
 #define MS_CHECK(f, ...)  do { \
-        HRESULT __ms_hr__ = (f); \
+        const HRESULT __ms_hr__ = (f); \
         if (FAILED(__ms_hr__)) { \
             std::clog << #f "  ERROR@" << __LINE__ << __FUNCTION__ << ": (" << std::hex << __ms_hr__ << std::dec << ") " << std::error_code(__ms_hr__, std::system_category()).message() << std::endl << std::flush; \
             __VA_ARGS__ \
@@ -43,7 +44,6 @@ public:
     BRawReader();
     ~BRawReader() override = default;
     const char* name() const override { return "BRAW"; }
-    bool isSupported(const std::string& url, MediaType type) const override;
     void setTimeout(int64_t value, TimeoutCallback cb) override {}
     bool load() override;
     bool unload() override;
@@ -211,7 +211,7 @@ static void get_attributes(IBlackmagicRawFrame* frame, unordered_map<string,stri
             }
             md.emplace(fourcc_to_str(i) + ".list", vals);
         } else if (SUCCEEDED(a->GetFrameAttributeRange(i, &valMin, &valMax, &ro))) {
-            string vals = to_string(valMin) + '+' + to_string(valMax);
+            const auto vals = to_string(valMin) + '+' + to_string(valMax);
             md.emplace(fourcc_to_str(i) + ".range", vals);
             //clog << fourcc_to_str(i) + ".range: " + vals << endl;
         }
@@ -244,7 +244,7 @@ static void read_metadata(IBlackmagicRawMetadataIterator* i, unordered_map<strin
     //    clog << k << " = " << v << endl;
 }
 
-void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip)
+void to(MediaInfo& info, const ComPtr<IBlackmagicRawClip>& clip)
 {
     info.format = "braw";
 
@@ -305,8 +305,7 @@ void to(MediaInfo& info, ComPtr<IBlackmagicRawClip> clip)
 
 PixelFormat to(BlackmagicRawResourceFormat fmt)
 {
-    switch (fmt)
-    {
+    switch (fmt) {
     case blackmagicRawResourceFormatRGBAU8: return PixelFormat::RGBA; // "rgba"
     case blackmagicRawResourceFormatBGRAU8: return PixelFormat::BGRA; // "bgra"
     case blackmagicRawResourceFormatRGBU16: return PixelFormat::RGB48LE; // "rgb48le" NOT RECOMMENDED! 3 channel formats are not directly supported by gpu
@@ -323,8 +322,7 @@ PixelFormat to(BlackmagicRawResourceFormat fmt)
 
 BlackmagicRawResourceFormat from(PixelFormat fmt)
 {
-    switch (fmt)
-    {
+    switch (fmt) {
     case PixelFormat::RGBA: return blackmagicRawResourceFormatRGBAU8;
     case PixelFormat::BGRA: return blackmagicRawResourceFormatBGRAU8;
     case PixelFormat::RGB48LE: return blackmagicRawResourceFormatRGBU16; // NOT RECOMMENDED! 3 channel formats are not directly supported by gpu
@@ -349,20 +347,6 @@ BRawReader::BRawReader()
         return;
     }
 
-}
-
-bool BRawReader::isSupported(const std::string& url, MediaType type) const
-{
-    if (url.empty())
-        return true;
-    auto dot = url.rfind('.');
-    if (dot == string::npos)
-        return true;
-    string s = url.substr(dot + 1);
-    transform(s.begin(), s.end(), s.begin(), [](unsigned char c){
-        return std::tolower(c);
-    });
-    return s == "braw";
 }
 
 bool BRawReader::load()
@@ -562,7 +546,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     index_ = index; // update index_ before seekComplete because pending seek may be executed in seekCompleted
     if (seekId > 0 && seekWaitFrame) {
         seeking_--;
-        if (seeking_ > 0 && seekId == 0) {
+        if (seeking_ > 0/* && seekId == 0*/) { // ?
             seekComplete(duration_ * index / frames_, seekId); // may create a new seek
             clog << "ProcessComplete drop @" << index << endl;
             return;
@@ -864,7 +848,7 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
 
 
 void register_framereader_braw() {
-    FrameReader::registerOnce("braw", []{return new BRawReader();});
+    FrameReader::registerOnce("BRAW", []{return new BRawReader();}, {{"braw"}});
 }
 MDK_NS_END
 
