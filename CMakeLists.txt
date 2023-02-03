@@ -1,19 +1,22 @@
 cmake_minimum_required(VERSION 3.1)
-if(POLICY CMP0025)
-# MUST call before project() and enable_language
-  cmake_policy(SET CMP0025 NEW) # since 3.0, prefer AppleClang instead of Clang.
-endif()
 
 project(mdk-braw VERSION 0.16.0 DESCRIPTION "mdk braw plugin")
 set(PROJECT_VERSION_TWEAK 0)
+
+set(MDKSDK "${CMAKE_CURRENT_SOURCE_DIR}/mdk-sdk" CACHE STRING "libmdk SDK dir")
+
 if(CMAKE_PROJECT_NAME STREQUAL mdk) # build in source tree
     include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/video/interop ${CMAKE_SOURCE_DIR})
+else()
+    list(APPEND CMAKE_MODULE_PATH ${MDKSDK}/lib/cmake)
 endif()
+find_package(MDK)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Threads)
 link_libraries(Threads::Threads)
-
-include(cmake/FindMDK.cmake)
 
 add_library(${PROJECT_NAME} MODULE
     BRawReader.cpp
