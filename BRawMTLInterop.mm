@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
  * This file is part of MDK
  */
 #include "BRawMTLInterop.h"
@@ -71,7 +71,7 @@ bool BRawMTLInterop::transfer_begin_mtl(BRawVideoBuffers bufs, NativeVideoBuffer
         desc.resourceOptions = MTLResourceStorageModePrivate;
         desc.storageMode = mtlBuf.storageMode;
         desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-        id<MTLTexture> tex = [mtlBuf newTextureWithDescriptor:desc offset:offset bytesPerRow:fmt.bytesPerLine(bufs.width, i)];
+        const id<MTLTexture> tex = [mtlBuf newTextureWithDescriptor:desc offset:offset bytesPerRow:fmt.bytesPerLine(bufs.width, i)];
         mp->width[i] = bufs.width;
         mp->height[i] = bufs.height;
         ma->tex[i] = (__bridge_retained void*)tex;

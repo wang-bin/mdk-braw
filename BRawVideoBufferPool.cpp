@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
  */
 #include "mdk/VideoBuffer.h"
-#include "NativeVideoBufferTemplate.h"
 #include "BRawGLInterop.h"
 #include "BRawD3D11Interop.h"
 #include "BRawMTLInterop.h"
+#if  __has_include("NativeVideoBufferTemplate.h")
+#include "NativeVideoBufferTemplate.h"
 
 using namespace std;
 
@@ -41,7 +42,7 @@ public:
         }
         if (!host)
             return false;
-        VideoFormat fmt = bufs.format;
+        const VideoFormat fmt = bufs.format;
         mp->format = bufs.format;
         size_t offset = 0;
         for (int i = 0; i < fmt.planeCount(); ++i) {
@@ -74,3 +75,8 @@ void register_native_buffer_pool_braw()
     });
 }
 MDK_NS_END
+#else
+MDK_NS_BEGIN
+void register_native_buffer_pool_braw() {}
+MDK_NS_END
+#endif //__has_include("NativeVideoBufferTemplate.h")
