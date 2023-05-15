@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
+ */
 #include "Variant.h"
 #include "BStr.h"
 #include <algorithm>
@@ -9,7 +12,7 @@ using namespace std;
 #define MS_ENSURE(f, ...) MS_CHECK(f, return __VA_ARGS__;)
 #define MS_WARN(f) MS_CHECK(f)
 #define MS_CHECK(f, ...)  do { \
-        HRESULT __ms_hr__ = (f); \
+        const HRESULT __ms_hr__ = (f); \
         if (FAILED(__ms_hr__)) { \
             std::clog << #f "  ERROR@" << __LINE__ << __FUNCTION__ << ": (" << std::hex << __ms_hr__ << std::dec << ") " << std::error_code(__ms_hr__, std::system_category()).message() << std::endl << std::flush; \
             __VA_ARGS__ \

@@ -54,6 +54,8 @@ public:
         return true;
     }
 
+    void* transfer_begin_d3d12(BRawVideoBuffers*, NativeVideoBuffer::MapParameter*) {return nullptr;}
+    void transfer_end_d3d12(void*) {}
 private:
     //friend class BRawVideoVideoBuffer; // access protected interop apis
     void* hostRes_ = nullptr; // cpu readable

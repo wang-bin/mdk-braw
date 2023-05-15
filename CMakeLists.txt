@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.15)
 
 project(mdk-braw VERSION 0.16.0 DESCRIPTION "mdk braw plugin")
 set(PROJECT_VERSION_TWEAK 0)

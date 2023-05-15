@@ -21,7 +21,6 @@
 #include <iostream>
 #include <string_view>
 #include <thread>
-#include <sstream>
 
 using namespace std;
 using namespace Microsoft::WRL; //ComPtr
@@ -64,8 +63,8 @@ public:
     }
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
-    ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
-    ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
+    ULONG STDMETHODCALLTYPE AddRef() override { return 0; }
+    ULONG STDMETHODCALLTYPE Release() override { return 0; }
 protected:
     void onPropertyChanged(const std::string& /*key*/, const std::string& /*value*/) override;
 private:
@@ -105,17 +104,6 @@ private:
 
     NativeVideoBufferPoolRef pool_;
 };
-
-static string fourcc_to_str(uint32_t fcc)
-{
-    stringstream ss;
-    ss << std::hex << fcc << std::dec;
-    char t[] = { '\'', char((fcc>>24)&0xff), char((fcc>>16)&0xff),char((fcc>>8)&0xff),  char(fcc & 0xff), '\''};
-    for (auto i : t)
-        if (!i)
-            return ss.str();
-    return {t, std::size(t)};
-}
 
 static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&,const string&)>&& cb)
 {
@@ -171,15 +159,15 @@ static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&
             for (const auto& v : vars) {
                 vals += to_string(v) + ',';
             }
-            cb(fourcc_to_str(i) + ".list", vals);
+            cb(FOURCC_name(i) + ".list", vals);
         } else if (SUCCEEDED(a->GetClipAttributeRange(i, &valMin, &valMax, &ro))) {
             const auto vals = to_string(valMin) + '+' + to_string(valMax);
-            cb(fourcc_to_str(i) + ".range", vals);
+            cb(FOURCC_name(i) + ".range", vals);
         }
         if (SUCCEEDED(a->GetClipAttribute(i, &val))) {
             auto v = to_string(val);
             if (!v.empty())
-                cb(fourcc_to_str(i), v);
+                cb(FOURCC_name(i), v);
         }
     }
 }
@@ -209,17 +197,17 @@ static void get_attributes(IBlackmagicRawFrame* frame, unordered_map<string,stri
             for (const auto& v : vars) {
                 vals += to_string(v) + ',';
             }
-            md.emplace(fourcc_to_str(i) + ".list", vals);
+            md.emplace(FOURCC_name(i) + ".list", vals);
         } else if (SUCCEEDED(a->GetFrameAttributeRange(i, &valMin, &valMax, &ro))) {
             const auto vals = to_string(valMin) + '+' + to_string(valMax);
-            md.emplace(fourcc_to_str(i) + ".range", vals);
-            //clog << fourcc_to_str(i) + ".range: " + vals << endl;
+            md.emplace(FOURCC_name(i) + ".range", vals);
+            //clog << FOURCC_name(i) + ".range: " + vals << endl;
         }
         if (SUCCEEDED(a->GetFrameAttribute(i, &val))) {
             auto v = to_string(val);
             if (!v.empty())
-                md.emplace(fourcc_to_str(i), v);
-            //clog << fourcc_to_str(i) + " = " + v << endl;
+                md.emplace(FOURCC_name(i), v);
+            //clog << FOURCC_name(i) + " = " + v << endl;
         }
     }
 }
@@ -375,7 +363,7 @@ bool BRawReader::load()
     MS_ENSURE(configEx->GetResourceManager(&resMgr_), false);
     BlackmagicRawInstructionSet instruction;
     MS_ENSURE(configEx->GetInstructionSet(&instruction), false);
-    clog << "BlackmagicRawInstructionSet: " << fourcc_to_str(instruction) << endl;
+    clog << "BlackmagicRawInstructionSet: " << FOURCC_name(instruction) << endl;
 
     BStr file(url().data());
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
@@ -391,7 +379,7 @@ bool BRawReader::load()
         MS_ENSURE(res->GetClosestScaleForResolution(scaleToW_, scaleToH_, false, &scale_), false);
         uint32_t retW = 0, retH = 0;
         MS_ENSURE(res->GetClosestResolutionForScale(scale_, &retW, &retH), false);
-        clog << "desired resolution: " << scaleToW_ << "x" << scaleToH_ << ", result: " << retW << "x" << retH << " scale: " << fourcc_to_str(scale_) << endl;
+        clog << "desired resolution: " << scaleToW_ << "x" << scaleToH_ << ", result: " << retW << "x" << retH << " scale: " << FOURCC_name(scale_) << endl;
         uint32_t count = 0;
         MS_WARN(res->GetResolutionCount(&count));
         for (uint32_t i = 0; i < count; ++i) {
@@ -571,7 +559,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     MS_ENSURE(processedImage->GetResourceType(&type));
 
 
-    VideoFormat fmt = to(f);
+    const VideoFormat fmt = to(f);
     VideoFrame frame(width, height, fmt);
 
     if (type != blackmagicRawResourceTypeBufferCPU) {
@@ -583,11 +571,11 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
             if (!imageData[0]) { // cuda, ocl
                 if (!processedRes_) {
                     processedType_ = type;
-                    clog << "try CPU readable GPU writable memory for " << fourcc_to_str(type) << endl;
+                    clog << "try CPU readable GPU writable memory for " << FOURCC_name(type) << endl;
                     MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteGPU, &processedRes_));
                     MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0])); // why host ptr is null?
                     if (!imageData[0]) {
-                        clog << "try CPU readable CPU writable memory for " << fourcc_to_str(type) << endl;
+                        clog << "try CPU readable CPU writable memory for " << FOURCC_name(type) << endl;
                         MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
                         MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteCPU, &processedRes_)); // processed image is on cpu readable memory?
                     }
@@ -597,7 +585,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
                     MS_ENSURE(resMgr_->CopyResource(context, cmdQueue, res, type, processedRes_, type, sizeBytes, false));
             }
     // TODO: less copy via [MTLBuffer newBufferWithBytesNoCopy:length:options:deallocator:] from VideoFrame.buffer(0)
-            //clog << fourcc_to_str(type) << " processedRes_ " << processedRes_ << " res " << res << " imageData: " << (void*)imageData[0] << endl;
+            //clog << FOURCC_name(type) << " processedRes_ " << processedRes_ << " res " << res << " imageData: " << (void*)imageData[0] << endl;
             if (imageData[0])
                 frame.setBuffers(imageData);
         }
@@ -699,7 +687,7 @@ bool BRawReader::setupPipeline()
         MS_WARN(pit->GetPipeline(&pipeline));
         BlackmagicRawInterop interop;
         MS_WARN(pit->GetInterop(&interop));
-        clog << name << " braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << endl;
+        clog << name << " braw pipeline: " << FOURCC_name(pipeline) << ", interop: " << FOURCC_name(interop) << endl;
         if (!found)
             found = !pipeline_ || (pipeline == pipeline_ && interop_ == interop);
         if (!best || best == blackmagicRawPipelineCPU)
@@ -730,7 +718,7 @@ bool BRawReader::setupPipeline()
             if (SUCCEEDED(dev->GetName(&nameb)))
                 name = BStr::to_string(nameb);
         }
-        clog << "braw pipeline: " << fourcc_to_str(pipeline) << ", interop: " << fourcc_to_str(interop) << ", device: '" << name << "' - " << dev.Get();
+        clog << "braw pipeline: " << FOURCC_name(pipeline) << ", interop: " << FOURCC_name(interop) << ", device: '" << name << "' - " << dev.Get();
         if (!deviceName_.empty()) {
             transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c);});
             if (name.find(deviceName_) != string::npos) {
@@ -745,7 +733,7 @@ bool BRawReader::setupPipeline()
     } while (it->Next() == S_OK); // crash if pipeline + interop is not supported
 
     if (!dev_) {
-        clog << "No device found for pipeline " << fourcc_to_str(pipeline_selected) << " + interop " << fourcc_to_str(interop_) << " + device " << deviceName_ << endl;
+        clog << "No device found for pipeline " << FOURCC_name(pipeline_selected) << " + interop " << FOURCC_name(interop_) << " + device " << deviceName_ << endl;
         return false;
     }
 
@@ -796,7 +784,7 @@ void BRawReader::parseDecoderOptions()
 
 void BRawReader::onPropertyChanged(const std::string& key, const std::string& val)
 {
-    const auto k = detail::fnv1a_32(key);
+    const auto k = detail::fnv1ah32::hash(key);
     switch (k) {
     case "format"_svh:
         format_ = VideoFormat::fromName(val.data());
