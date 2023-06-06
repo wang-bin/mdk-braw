@@ -345,6 +345,9 @@ bool BRawReader::load()
     MS_ENSURE(codec_->SetCallback(this), false);
     ComPtr<IBlackmagicRawConfiguration> config;
     MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
+    BRawStr ver;
+    if (SUCCEEDED(config->GetVersion(&ver)))
+        clog << "IBlackmagicRawConfiguration Version: " << BStr::to_string(ver) << endl;
 
     parseDecoderOptions();
 
@@ -376,7 +379,7 @@ bool BRawReader::load()
     if (scaleToW_ > 0 || scaleToH_ > 0) {
         ComPtr<IBlackmagicRawClipResolutions> res;
         MS_ENSURE(clip_->QueryInterface(IID_IBlackmagicRawClipResolutions, &res), false);
-        MS_ENSURE(res->GetClosestScaleForResolution(scaleToW_, scaleToH_, false, &scale_), false);
+        MS_ENSURE(res->GetClosestScaleForResolution(scaleToW_, scaleToH_, &scale_), false);
         uint32_t retW = 0, retH = 0;
         MS_ENSURE(res->GetClosestResolutionForScale(scale_, &retW, &retH), false);
         clog << "desired resolution: " << scaleToW_ << "x" << scaleToH_ << ", result: " << retW << "x" << retH << " scale: " << FOURCC_name(scale_) << endl;
