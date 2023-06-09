@@ -843,9 +843,10 @@ void register_framereader_braw() {
 }
 MDK_NS_END
 
-extern "C" MDK_API int mdk_plugin_load() {
+// project name must be braw or mdk-braw
+MDK_PLUGIN(braw) {
     using namespace MDK_NS;
     register_framereader_braw();
     register_native_buffer_pool_braw();
-    return abiVersion();
+    return MDK_ABI_VERSION;
 }

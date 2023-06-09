@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
  */
 
 #include "BlackmagicRawAPI.h"
@@ -58,7 +58,7 @@ template<typename T> static T default_rv() {return {};}
 template<> void default_rv<void>() {}
 
 #if (__APPLE__ + 0)
-CFBundleRef load_bundle(const char* fwkName)
+static CFBundleRef load_bundle(const char* fwkName)
 {
     if (auto m = CFBundleGetMainBundle()) {
         if (auto url = CFBundleCopyPrivateFrameworksURL(m)) {

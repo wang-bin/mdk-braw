@@ -18,7 +18,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads)
 link_libraries(Threads::Threads)
 
-add_library(${PROJECT_NAME} MODULE
+setup_mdk_plugin(${PROJECT_NAME})
+
+target_sources(${PROJECT_NAME} PRIVATE
     BRawReader.cpp
     BRawAPILoader.cpp
     BRawVideoBufferPool.cpp
@@ -46,5 +48,3 @@ elseif(WIN32)
 else()
   target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 endif()
-
-setup_mdk_plugin(${PROJECT_NAME})
