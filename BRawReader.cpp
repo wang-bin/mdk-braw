@@ -92,7 +92,7 @@ private:
     BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
     string deviceName_; // opencl device can be NVIDIA(adapter name? nv does not work and slow?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
     PixelFormat format_ = PixelFormat::RGBA;
-    int copy_ = 1; // copy gpu resources
+    int copy_ = 0; // copy gpu resources. only works for cuda pipeline, otherwise still copies.
     BlackmagicRawResolutionScale scale_ = blackmagicRawResolutionScaleFull; // higher fps if scaled
     uint32_t scaleToW_ = 0; // closest down scale to target width
     uint32_t scaleToH_ = 0;
