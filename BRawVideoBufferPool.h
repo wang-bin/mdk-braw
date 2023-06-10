@@ -23,5 +23,4 @@ struct BRawVideoBuffers
     IBlackmagicRawResourceManager* resMgr; // for host map
 };
 
-void register_native_buffer_pool_braw();
 MDK_NS_END

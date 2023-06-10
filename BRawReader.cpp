@@ -752,8 +752,6 @@ bool BRawReader::setupPipeline()
 
     if (pipeline_selected == blackmagicRawPipelineCUDA)
         pool_ = NativeVideoBufferPool::create("CUDA"); // better support d3d11/opengl/opengles
-    else
-        pool_ = NativeVideoBufferPool::create("BRAW"); // seems not work with cuda and opencl
     return true;
 }
 
@@ -847,6 +845,5 @@ MDK_NS_END
 MDK_PLUGIN(braw) {
     using namespace MDK_NS;
     register_framereader_braw();
-    register_native_buffer_pool_braw();
     return MDK_ABI_VERSION;
 }

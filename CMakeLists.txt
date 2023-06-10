@@ -5,9 +5,7 @@ set(PROJECT_VERSION_TWEAK 0)
 
 set(MDKSDK "${CMAKE_CURRENT_SOURCE_DIR}/mdk-sdk" CACHE STRING "libmdk SDK dir")
 
-if(CMAKE_PROJECT_NAME STREQUAL mdk) # build in source tree
-    include_directories(${CMAKE_SOURCE_DIR}/video/interop)
-else()
+if(NOT CMAKE_PROJECT_NAME STREQUAL mdk) # not build in source tree
     list(APPEND CMAKE_MODULE_PATH ${MDKSDK}/lib/cmake)
 endif()
 find_package(MDK)
@@ -23,8 +21,6 @@ setup_mdk_plugin(${PROJECT_NAME})
 target_sources(${PROJECT_NAME} PRIVATE
     BRawReader.cpp
     BRawAPILoader.cpp
-    BRawVideoBufferPool.cpp
-    BRawGLInterop.cpp
     Variant.cpp
 )
 
@@ -37,14 +33,11 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
 if(APPLE)
-  target_sources(${PROJECT_NAME} PRIVATE BRawMTLInterop.mm)
-  target_compile_options(${PROJECT_NAME} PRIVATE -fobjc-arc)
   target_link_libraries(${PROJECT_NAME} PRIVATE
     "-framework CoreFoundation" "-framework Metal")
   # set rpath
 elseif(WIN32)
-  target_sources(${PROJECT_NAME} PRIVATE BRawD3D11Interop.cpp)
-  target_link_libraries(${PROJECT_NAME} PRIVATE OleAut32 d3d11)
+  target_link_libraries(${PROJECT_NAME} PRIVATE OleAut32)
 else()
   target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 endif()
