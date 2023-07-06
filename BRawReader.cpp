@@ -5,6 +5,8 @@
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
 // hdr (gamma, gamut) attributes
 // TODO: save sidecar, trim clip
+//#define BRAW_MAJOR 2
+
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
 #include "mdk/VideoFrame.h"
@@ -345,10 +347,11 @@ bool BRawReader::load()
     MS_ENSURE(codec_->SetCallback(this), false);
     ComPtr<IBlackmagicRawConfiguration> config;
     MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
+#if (BRAW_MAJOR + 0) >= 3
     BRawStr ver;
     if (SUCCEEDED(config->GetVersion(&ver)))
         clog << "IBlackmagicRawConfiguration Version: " << BStr::to_string(ver) << endl;
-
+#endif
     parseDecoderOptions();
 
 
@@ -379,9 +382,12 @@ bool BRawReader::load()
     if (scaleToW_ > 0 || scaleToH_ > 0) {
         ComPtr<IBlackmagicRawClipResolutions> res;
         MS_ENSURE(clip_->QueryInterface(IID_IBlackmagicRawClipResolutions, &res), false);
-        MS_ENSURE(res->GetClosestScaleForResolution(scaleToW_, scaleToH_, &scale_), false);
         uint32_t retW = 0, retH = 0;
+#if (BRAW_MAJOR + 0) >= 3
         MS_ENSURE(res->GetClosestResolutionForScale(scale_, &retW, &retH), false);
+#else
+        MS_ENSURE(res->GetClosestScaleForResolution(scaleToW_, scaleToH_, false, &scale_), false);
+#endif
         clog << "desired resolution: " << scaleToW_ << "x" << scaleToH_ << ", result: " << retW << "x" << retH << " scale: " << FOURCC_name(scale_) << endl;
         uint32_t count = 0;
         MS_WARN(res->GetResolutionCount(&count));
