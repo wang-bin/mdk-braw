@@ -383,11 +383,11 @@ bool BRawReader::load()
         ComPtr<IBlackmagicRawClipResolutions> res;
         MS_ENSURE(clip_->QueryInterface(IID_IBlackmagicRawClipResolutions, &res), false);
         uint32_t retW = 0, retH = 0;
-#if (BRAW_MAJOR + 0) >= 3
-        MS_ENSURE(res->GetClosestResolutionForScale(scale_, &retW, &retH), false);
-#else
-        MS_ENSURE(res->GetClosestScaleForResolution(scaleToW_, scaleToH_, false, &scale_), false);
+        res->GetClosestScaleForResolution(scaleToW_, scaleToH_
+#if (BRAW_MAJOR + 0) < 3
+            , false
 #endif
+            , &scale_);
         clog << "desired resolution: " << scaleToW_ << "x" << scaleToH_ << ", result: " << retW << "x" << retH << " scale: " << FOURCC_name(scale_) << endl;
         uint32_t count = 0;
         MS_WARN(res->GetResolutionCount(&count));
