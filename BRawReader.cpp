@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
+#include <mutex>
 #include <thread>
 
 using namespace std;
@@ -105,6 +106,7 @@ private:
     atomic<uint64_t> index_ = 0; // for stepping frame forward/backward
 
     NativeVideoBufferPoolRef pool_;
+    mutex unload_mtx_;
 };
 
 static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&,const string&)>&& cb)
@@ -424,7 +426,10 @@ bool BRawReader::load()
 
 bool BRawReader::unload()
 {
-    update(MediaStatus::Unloaded);
+    {
+        lock_guard lock(unload_mtx_);
+        update(MediaStatus::Unloaded);
+    }
     if (!codec_) {
         update(State::Stopped);
         return false;
@@ -544,12 +549,15 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     index_ = index; // update index_ before seekComplete because pending seek may be executed in seekCompleted
     if (seekId > 0 && seekWaitFrame) {
         seeking_--;
-        if (seeking_ > 0/* && seekId == 0*/) { // ?
+        lock_guard lock(unload_mtx_);
+        if (test_flag(mediaStatus() & MediaStatus::Loaded)) {
+            if (seeking_ > 0/* && seekId == 0*/) { // ?
+                seekComplete(duration_ * index / frames_, seekId); // may create a new seek
+                clog << "ProcessComplete drop @" << index << endl;
+                return;
+            }
             seekComplete(duration_ * index / frames_, seekId); // may create a new seek
-            clog << "ProcessComplete drop @" << index << endl;
-            return;
         }
-        seekComplete(duration_ * index / frames_, seekId); // may create a new seek
     }
 
     MS_ENSURE(result);// TODO: stop?
