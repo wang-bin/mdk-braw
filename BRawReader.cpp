@@ -231,6 +231,7 @@ static void read_metadata(IBlackmagicRawMetadataIterator* i, unordered_map<strin
             md.emplace(BStr::to_string(key), v);
         VariantClear(&val);
         i->Next();
+    //CFRelease(key);// FIXME: leak detected in xcode in 3.1 sdk
     }
     //for (const auto& [k, v] : md)
     //    clog << k << " = " << v << endl;
@@ -843,11 +844,26 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
             scaleToW_ = strtoul(val.data(), &s, 10);
             if (s && s[0] == 'x')
                 scaleToH_ = strtoul(s + 1, nullptr, 10);
+        } else if (val.find("1/") == 0) {
+            const auto s = atoi(&val[2]);
+            if (s >= 6) {
+                scale_ = blackmagicRawResolutionScaleEighth;
+            } else if (s >= 3) {
+                scale_ = blackmagicRawResolutionScaleQuarter;
+            } else if (s > 1) {
+                scale_ = blackmagicRawResolutionScaleHalf;
+            } else {
+                scale_ = blackmagicRawResolutionScaleFull;
+            }
         } else {
             scaleToW_ = strtoul(val.data(), nullptr, 10);
             scaleToH_ = scaleToW_;
         }
     }
+        return;
+    case "decoder"_svh:
+    case "video.decoder"_svh:
+        parse(val.data());
         return;
     }
     // TODO: if property is a clip attribute and exists, guess VARIANT then SetClipAttribute(). if not exist, insert only
