@@ -437,6 +437,7 @@ bool BRawReader::unload()
     }
     // TODO: job->Abort();
     codec_->FlushJobs(); // must wait all jobs to safe release
+    frameAvailable(VideoFrame().setTimestamp(TimestampEOS)); // clear vo frames
     if (processedRes_) {
         BlackmagicRawPipeline pipeline;
         void* context = nullptr;
@@ -675,12 +676,14 @@ typedef unsigned int CUdeviceptr;
 
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
     frame.setDuration((double)duration_/(double)frames_ / 1000.0);
+
+    lock_guard lock(unload_mtx_);
     // FIXME: stop playback in onFrame() callback results in dead lock in braw(FlushJobs will wait this function finished)
     if (seekId > 0) {
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
     }
     bool accepted = frameAvailable(frame); // false: out of loop range and begin a new loop
-    if (index == frames_ - 1 && seeking_ == 0 && accepted) {
+    if ((index == frames_ - 1 && seeking_ == 0 && accepted) || !test_flag(mediaStatus() & MediaStatus::Loaded)) {
         accepted = frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
         if (accepted && !test_flag(options() & Options::ContinueAtEnd)) {
             thread([=]{ unload(); }).detach(); // unload() in current thread will result in dead lock
