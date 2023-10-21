@@ -85,9 +85,9 @@ private:
     };
 
     ComPtr<IBlackmagicRawFactory> factory_;
+    ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawPipelineDevice> dev_;
     ComPtr<IBlackmagicRawResourceManager> resMgr_;
-    ComPtr<IBlackmagicRaw> codec_;
     ComPtr<IBlackmagicRawClip> clip_;
     void* processedRes_ = nullptr; // cpu readable(gpu writable?) in copy mode
     BlackmagicRawResourceType processedType_ = 0;
@@ -107,6 +107,7 @@ private:
 
     NativeVideoBufferPoolRef pool_;
     mutex unload_mtx_;
+    shared_ptr<bool> loaded_;
 };
 
 static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&,const string&)>&& cb)
@@ -377,6 +378,8 @@ bool BRawReader::load()
     BStr file(url().data());
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
 
+    loaded_ = make_shared<bool>();
+
     MediaEvent e{};
     e.category = "decoder.video";
     e.detail = "braw";
@@ -446,6 +449,7 @@ bool BRawReader::unload()
         MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
         processedRes_ = nullptr;
     }
+    loaded_.reset();
     codec_.Reset();
     clip_.Reset();
     frames_ = 0;
@@ -636,7 +640,11 @@ typedef unsigned int CUdeviceptr;
                 cuframe.stride[i] = fmt.bytesPerLine(width, i);
             }
             processedImage->AddRef();
+            weak_ptr<bool> wp = loaded_;
             auto nativeBuf = pool_->getBuffer(&cuframe, [=]{
+                auto sp = wp.lock();
+                if (!sp)
+                    return;
                 processedImage->Release(); // invalid if braw objects are destroyed in unload()?
             });
             if (copy_) {
