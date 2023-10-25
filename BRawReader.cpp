@@ -90,6 +90,7 @@ private:
     ComPtr<IBlackmagicRawResourceManager> resMgr_;
     ComPtr<IBlackmagicRawClip> clip_;
     void* processedRes_ = nullptr; // cpu readable(gpu writable?) in copy mode
+    uint8_t* processedResCpu_ = nullptr; // cpu buffer for OpenCL copy
     BlackmagicRawResourceType processedType_ = 0;
     BlackmagicRawPipeline pipeline_ = blackmagicRawPipelineCPU; // set by user only
     BlackmagicRawInterop interop_ = blackmagicRawInteropNone;
@@ -449,6 +450,10 @@ bool BRawReader::unload()
         MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
         processedRes_ = nullptr;
     }
+    if (processedResCpu_) {
+        delete[] processedResCpu_;
+        processedResCpu_ = nullptr;
+    }
     loaded_.reset();
     codec_.Reset();
     clip_.Reset();
@@ -508,7 +513,7 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
         seekWaitFrame = data->seekWaitFrame;
         delete data;
     }
-    if (seekId > 0 && !seekWaitFrame) {
+    if (seekId > 0 && (!seekWaitFrame || FAILED(result))) {
         seeking_--;
         seekComplete(duration_ * index / frames_, seekId);
     }
@@ -596,20 +601,30 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
             MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0])); // metal can get host ptr?
 #endif
             if (!imageData[0]) { // cuda, ocl
-                if (!processedRes_) {
-                    processedType_ = type;
-                    clog << "try CPU readable GPU writable memory for " << FOURCC_name(type) << endl;
-                    MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteGPU, &processedRes_));
-                    MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0])); // why host ptr is null?
-                    if (!imageData[0]) {
-                        clog << "try CPU readable CPU writable memory for " << FOURCC_name(type) << endl;
-                        MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
-                        MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteCPU, &processedRes_)); // processed image is on cpu readable memory?
+                if (type == blackmagicRawResourceTypeBufferOpenCL) {
+                    if (!processedRes_ && !processedResCpu_) {
+                        MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteGPU, &processedRes_));
+                        processedResCpu_ = new uint8_t[sizeBytes];
                     }
-                }
-                MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0]));
-                if (imageData[0])
                     MS_ENSURE(resMgr_->CopyResource(context, cmdQueue, res, type, processedRes_, type, sizeBytes, false));
+                    MS_ENSURE(resMgr_->CopyResource(context, cmdQueue, processedRes_, type, processedResCpu_, blackmagicRawResourceTypeBufferCPU, sizeBytes, false));
+                    imageData[0] = processedResCpu_;
+                } else {
+                    if (!processedRes_) {
+                        processedType_ = type;
+                        clog << "try CPU readable GPU writable memory for " << FOURCC_name(type) << endl;
+                        MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteGPU, &processedRes_));
+                        MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0])); // why host ptr is null?
+                        if (!imageData[0]) {
+                            clog << "try CPU readable CPU writable memory for " << FOURCC_name(type) << endl;
+                            MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
+                            MS_ENSURE(resMgr_->CreateResource(context, cmdQueue, sizeBytes, type, blackmagicRawResourceUsageReadCPUWriteCPU, &processedRes_)); // processed image is on cpu readable memory?
+                        }
+                    }
+                    MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, processedRes_, type, (void**)&imageData[0]));
+                    if (imageData[0])
+                        MS_ENSURE(resMgr_->CopyResource(context, cmdQueue, res, type, processedRes_, type, sizeBytes, false));
+                }
             }
     // TODO: less copy via [MTLBuffer newBufferWithBytesNoCopy:length:options:deallocator:] from VideoFrame.buffer(0)
             //clog << FOURCC_name(type) << " processedRes_ " << processedRes_ << " res " << res << " imageData: " << (void*)imageData[0] << endl;
