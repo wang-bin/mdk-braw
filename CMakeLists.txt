@@ -36,8 +36,13 @@ if(APPLE)
   target_link_libraries(${PROJECT_NAME} PRIVATE
     "-framework CoreFoundation" "-framework Metal")
   # set rpath
+# TODO: iOS: weak link,  DecoderMetal.framework
 elseif(WIN32)
   target_link_libraries(${PROJECT_NAME} PRIVATE OleAut32)
 else()
   target_link_libraries(${PROJECT_NAME} PRIVATE dl)
+endif()
+
+if(TARGET cppcompat) # requires https://github.com/wang-bin/cppcompat
+  target_link_libraries(${PROJECT_NAME} PRIVATE cppcompat)
 endif()
