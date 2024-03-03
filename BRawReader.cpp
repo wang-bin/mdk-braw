@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2024 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
@@ -596,10 +596,9 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         void* cmdQueue = nullptr;
         MS_ENSURE(processedImage->GetResourceContextAndCommandQueue(&context, &cmdQueue));
         if (copy_ || type == blackmagicRawResourceTypeBufferOpenCL || !pool_) {
-#if !defined(__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__)
-            // iOS: -[MTLToolsResource validateCPUWriteable]:135: failed assertion `resourceOptions (0x20) specify MTLResourceStorageModePrivate, which is not CPU accessible.'
-            MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0])); // metal can get host ptr?
-#endif
+            // iOS/macOS(debug): -[MTLToolsResource validateCPUWriteable]:135: failed assertion `resourceOptions (0x20) specify MTLResourceStorageModePrivate, which is not CPU accessible.'
+            if (type != blackmagicRawResourceTypeBufferMetal)
+                MS_WARN(resMgr_->GetResourceHostPointer(context, cmdQueue, res, type, (void**)&imageData[0])); // metal can get host ptr?
             if (!imageData[0]) { // cuda, ocl
                 if (type == blackmagicRawResourceTypeBufferOpenCL) {
                     if (!processedRes_ && !processedResCpu_) {
