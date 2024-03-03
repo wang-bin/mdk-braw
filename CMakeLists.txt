@@ -35,8 +35,12 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
 if(APPLE)
   target_link_libraries(${PROJECT_NAME} PRIVATE
     "-framework CoreFoundation" "-framework Metal")
-  # set rpath
-# TODO: iOS: weak link,  DecoderMetal.framework
+# if plugin is dynamic loaded, then main app/framework MUST link to BlackmagicRawAPI, otherwise appex can not load BlackmagicRawAPI because of sandbox
+  target_link_options(${CMAKE_PROJECT_NAME} PRIVATE "-F${CMAKE_CURRENT_LIST_DIR}/sdk/Frameworks")
+  if(IOS)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE "-weak_framework DecoderMetal")
+  endif()
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE "-weak_framework BlackmagicRawAPI")
 elseif(WIN32)
   target_link_libraries(${PROJECT_NAME} PRIVATE OleAut32)
 else()

@@ -1,0 +1,11 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios ]
+flags:           [ not_app_extension_safe ]
+install-name:    '@rpath/DecoderMetal.framework/DecoderMetal'
+current-version: 3.3
+compatibility-version: 3.3
+exports:
+  - targets:         [ arm64-ios ]
+    symbols:         [ _GetServices ]
+...
