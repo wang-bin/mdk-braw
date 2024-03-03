@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2024 WangBin <wbsecg1 at gmail.com>
  */
 
 #include "BlackmagicRawAPI.h"
@@ -61,6 +61,27 @@ template<> void default_rv<void>() {}
 static CFBundleRef load_bundle(const char* fwkName)
 {
     if (auto m = CFBundleGetMainBundle()) {
+        if (auto url = CFBundleCopyBundleURL(m)) {
+            if (auto ext = CFURLCopyPathExtension(url); ext) {
+                if (CFStringCompare(ext, CFSTR("appex"), 0) == kCFCompareEqualTo) {
+// MY_APP.app/PlugIns/MY_APP_EXTENSION.appex
+// appex is sandboxed, so main app/framework MUST link to fwkName if current module is dynamic loaded
+                    if (auto appUrl = CFURLCreateCopyDeletingLastPathComponent(kCFAllocatorDefault, url); appUrl) {
+                        CFRelease(url);
+                        url = appUrl;
+                        appUrl = CFURLCreateCopyDeletingLastPathComponent(kCFAllocatorDefault, url);
+                        CFRelease(url);
+                        url = appUrl;
+                        if (auto appM = CFBundleCreate(kCFAllocatorDefault, url); appM) {
+                            CFRelease(m);
+                            m = appM;
+                        }
+                    }
+                }
+                CFRelease(ext);
+            }
+            CFRelease(url);
+        }
         if (auto url = CFBundleCopyPrivateFrameworksURL(m)) {
             auto name = CFStringCreateWithCString(kCFAllocatorDefault, fwkName, kCFStringEncodingUTF8);
             auto fwkUrl = CFURLCreateCopyAppendingPathComponent(kCFAllocatorDefault, url, name, false);
