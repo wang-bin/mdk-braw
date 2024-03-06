@@ -55,7 +55,7 @@ using namespace std;
     }
 
 template<typename T> static T default_rv() {return {};}
-template<> void default_rv<void>() {}
+template<> [[maybe_unused]] void default_rv<void>() {}
 
 #if (__APPLE__ + 0)
 static CFBundleRef load_bundle(const char* fwkName)

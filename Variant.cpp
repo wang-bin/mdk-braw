@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2024 WangBin <wbsecg1 at gmail.com>
  */
 #include "Variant.h"
 #include "BStr.h"
@@ -18,6 +18,27 @@ using namespace std;
             __VA_ARGS__ \
         } \
     } while (false)
+
+static_assert(sizeof(ScopedVariant) == sizeof(VARIANT), "ScopedVariant size mismatch");
+ScopedVariant::ScopedVariant()
+{
+    VariantInit(this);
+}
+
+ScopedVariant::~ScopedVariant()
+{
+    if (vt == blackmagicRawVariantTypeString) {
+        // will be released and reset in VariantClear
+    }
+
+    VariantClear(this);
+}
+
+ScopedVariant* ScopedVariant::ReleaseAndGetAddressOf()
+{
+    VariantClear(this);
+    return this;
+}
 
 string to_string(const VARIANT& v)
 {

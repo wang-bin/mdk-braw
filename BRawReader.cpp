@@ -118,7 +118,9 @@ static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&
 
     uint32_t count = 0;
     bool ro = false;
-    if (SUCCEEDED(a->GetISOList(nullptr, &count, &ro))) { // from metadata?
+    if (SUCCEEDED(a->GetISOList(nullptr, &count, &ro))
+        && count > 0 // FIXME: windows is 0, msvc &empty_vec[0] no crash
+        ) { // from metadata?
         vector<uint32_t> iso(count);
         a->GetISOList(&iso[0], &count, &ro);
         string vals;
@@ -127,11 +129,8 @@ static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&
         cb("ISOList", vals);
     }
 
-    VARIANT val;
-    VariantInit(&val);
-    VARIANT valMin, valMax;
-    VariantInit(&valMin);
-    VariantInit(&valMax);
+    ScopedVariant val;
+    ScopedVariant valMin, valMax;
     for (auto i : {
         blackmagicRawClipProcessingAttributeColorScienceGen          , //= /* 'csgn' */ 0x6373676E,	// u16
         blackmagicRawClipProcessingAttributeGamma                    , //= /* 'gama' */ 0x67616D61,	// string
@@ -159,8 +158,10 @@ static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&
         blackmagicRawClipProcessingAttributeGamutCompressionEnable   , //= /* 'gace' */ 0x67616365	// u16, 0=disabled, 1=enabled
     }) {
         if (SUCCEEDED(a->GetClipAttributeList(i, nullptr, &count, &ro))) {
-            vector<VARIANT> vars(count);
-            a->GetClipAttributeList(i, &vars[0], &count, &ro);
+            if (count == 0) // FIXME: 'fiso' is 0 on windows
+                continue;
+            vector<ScopedVariant> vars(count);
+            a->GetClipAttributeList(i, vars.data(), &count, &ro);
             string vals;
             for (const auto& v : vars) {
                 vals += to_string(v) + ',';
@@ -182,13 +183,22 @@ static void get_attributes(IBlackmagicRawFrame* frame, unordered_map<string,stri
 {
     ComPtr<IBlackmagicRawFrameProcessingAttributes> a;
     MS_ENSURE(frame->QueryInterface(IID_IBlackmagicRawFrameProcessingAttributes, &a));
-    VARIANT val;
-    VariantInit(&val);
-    VARIANT valMin, valMax;
-    VariantInit(&valMin);
-    VariantInit(&valMax);
+
     uint32_t count = 0;
     bool ro = false;
+    if (SUCCEEDED(a->GetISOList(nullptr, &count, &ro))
+        && count > 0 // FIXME: windows is 0
+        ) { // from metadata?
+        vector<uint32_t> iso(count);
+        a->GetISOList(&iso[0], &count, &ro);
+        string vals;
+        for (auto i : iso)
+            vals += std::to_string(i) + ',';
+        md.emplace("ISOList", vals);
+    }
+
+    ScopedVariant val;
+    ScopedVariant valMin, valMax;
     for (auto i : {
         blackmagicRawFrameProcessingAttributeWhiteBalanceKelvin      , //= /* 'wbkv' */ 0x77626B76,	// u32
         blackmagicRawFrameProcessingAttributeWhiteBalanceTint        , //= /* 'wbtn' */ 0x7762746E,	// s16
@@ -197,6 +207,8 @@ static void get_attributes(IBlackmagicRawFrame* frame, unordered_map<string,stri
         blackmagicRawFrameProcessingAttributeAnalogGain              , //= /* 'agpf' */ 0x61677066	// float
     }) {
         if (SUCCEEDED(a->GetFrameAttributeList(i, nullptr, &count, &ro))) {
+            if (count == 0) // FIXME: 'fiso' is 0 on windows
+                continue;
             vector<VARIANT> vars(count);
             a->GetFrameAttributeList(i, &vars[0], &count, &ro);
             string vals;
@@ -204,6 +216,7 @@ static void get_attributes(IBlackmagicRawFrame* frame, unordered_map<string,stri
                 vals += to_string(v) + ',';
             }
             md.emplace(FOURCC_name(i) + ".list", vals);
+            //clog << FOURCC_name(i) + ".list: " + vals << endl;
         } else if (SUCCEEDED(a->GetFrameAttributeRange(i, &valMin, &valMax, &ro))) {
             const auto vals = to_string(valMin) + '+' + to_string(valMax);
             md.emplace(FOURCC_name(i) + ".range", vals);
@@ -224,8 +237,7 @@ static void read_metadata(IBlackmagicRawMetadataIterator* i, unordered_map<strin
         return;
     BStr key;
     while (SUCCEEDED(i->GetKey(&key))) {
-        VARIANT val;
-        VariantInit(&val);
+        ScopedVariant val;
         if (FAILED(i->GetData(&val)))
             break;
         auto v = to_string(val);
@@ -414,7 +426,7 @@ bool BRawReader::load()
     changed(info); // may call seek for player.prepare(), duration_, frames_ and SetCallback() must be ready
     update(MediaStatus::Loaded);
 
-    get_attributes(clip_.Get(), [=](const string& k, const string& v){
+    get_attributes(clip_.Get(), [this](const string& k, const string& v){
         setProperty(k, v);
     });
     updateBufferingProgress(0);
@@ -707,7 +719,7 @@ typedef unsigned int CUdeviceptr;
     if ((index == frames_ - 1 && seeking_ == 0 && accepted) || !test_flag(mediaStatus() & MediaStatus::Loaded)) {
         accepted = frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
         if (accepted && !test_flag(options() & Options::ContinueAtEnd)) {
-            thread([=]{ unload(); }).detach(); // unload() in current thread will result in dead lock
+            thread([this]{ unload(); }).detach(); // unload() in current thread will result in dead lock
         }
         return;
     }

@@ -1,7 +1,22 @@
+/*
+ * Copyright (c) 2022-2024 WangBin <wbsecg1 at gmail.com>
+ */
 #pragma once
 #include "BlackmagicRawAPI.h"
 #include <memory>
 #include <string>
+
+class ScopedVariant : public VARIANT
+{
+public:
+    ScopedVariant();
+    ~ScopedVariant();
+
+    ScopedVariant* ReleaseAndGetAddressOf();
+    ScopedVariant* operator&() {
+        return ReleaseAndGetAddressOf();
+    }
+};
 
 std::string to_string(const VARIANT& v);
 
