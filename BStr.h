@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2024 WangBin <wbsecg1 at gmail.com>
  */
 
 #pragma once
@@ -42,6 +42,8 @@ public:
 #endif
     }
 
+    BStr() = default;
+
     BStr(const char* s/*utf8*/) {
         if (!s)
             return;
@@ -69,6 +71,12 @@ public:
         return *this;
     }
 
+// release and get address of. BRawStr is allocated or ref added in GetXXX(BRawStr)
+    StrTye* operator&() {
+        release();
+        return &s_;
+    }
+
     ~BStr() {
         release();
     }
@@ -77,6 +85,9 @@ public:
         return s_;
     }
 
+    std::string to_string() const {
+        return BStr::to_string(s_);
+    }
 private:
     void release() {
         if (!s_)

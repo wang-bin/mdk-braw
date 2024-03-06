@@ -222,7 +222,7 @@ static void read_metadata(IBlackmagicRawMetadataIterator* i, unordered_map<strin
 {
     if (!i)
         return;
-    BRawStr key;
+    BStr key;
     while (SUCCEEDED(i->GetKey(&key))) {
         VARIANT val;
         VariantInit(&val);
@@ -230,10 +230,9 @@ static void read_metadata(IBlackmagicRawMetadataIterator* i, unordered_map<strin
             break;
         auto v = to_string(val);
         if (!v.empty())
-            md.emplace(BStr::to_string(key), v);
+            md.emplace(key.to_string(), v);
         VariantClear(&val);
         i->Next();
-    //CFRelease(key);// FIXME: leak detected in xcode in 3.1 sdk
     }
     //for (const auto& [k, v] : md)
     //    clog << k << " = " << v << endl;
@@ -353,9 +352,9 @@ bool BRawReader::load()
     ComPtr<IBlackmagicRawConfiguration> config;
     MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
 #if (BRAW_MAJOR + 0) >= 3
-    BRawStr ver;
+    BStr ver;
     if (SUCCEEDED(config->GetVersion(&ver)))
-        clog << "IBlackmagicRawConfiguration Version: " << BStr::to_string(ver) << endl;
+        clog << "IBlackmagicRawConfiguration Version: " << ver.to_string() << endl;
 #endif
     parseDecoderOptions();
 
@@ -727,10 +726,10 @@ bool BRawReader::setupPipeline()
     bool found = false;
     do {
         BlackmagicRawPipeline pipeline;
-        BRawStr nameb = nullptr;
+        BStr nameb;
         string name = "?";
         if (SUCCEEDED(pit->GetName(&nameb))) // "CPU" or "GPU"
-            name = BStr::to_string(nameb);
+            name = nameb.to_string();
         MS_WARN(pit->GetPipeline(&pipeline));
         BlackmagicRawInterop interop;
         MS_WARN(pit->GetInterop(&interop));
@@ -761,9 +760,9 @@ bool BRawReader::setupPipeline()
         MS_WARN(it->CreateDevice(&dev)); // maybe E_FAIL
         string name = "?";
         if (dev) {
-            BRawStr nameb = nullptr;
+            BStr nameb;
             if (SUCCEEDED(dev->GetName(&nameb)))
-                name = BStr::to_string(nameb);
+                name = nameb.to_string();
         }
         clog << "braw pipeline: " << FOURCC_name(pipeline) << ", interop: " << FOURCC_name(interop) << ", device: '" << name << "' - " << dev.Get();
         if (!deviceName_.empty()) {
