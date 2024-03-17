@@ -3,6 +3,7 @@
  */
 
 #include "BlackmagicRawAPI.h"
+#include "mdk/global.h"
 #include <cassert>
 # if __has_include("cppcompat/cstdlib.hpp")
 #   include "cppcompat/cstdlib.hpp"
@@ -23,7 +24,7 @@
 # if (BRAW_WINRT+0)
 #   define dlopen(filename, flags) LoadPackagedLibrary(filename, 0)
 # else
-#   define dlopen(filename, flags) LoadLibrary(filename)
+#   define dlopen(filename, flags) LoadLibraryA(filename)
 # endif
 # define dlsym(handle, symbol) GetProcAddress((HMODULE)handle, symbol)
 # define dlclose(handle) FreeLibrary((HMODULE)handle)
@@ -60,6 +61,19 @@ template<> [[maybe_unused]] void default_rv<void>() {}
 #if (__APPLE__ + 0)
 static CFBundleRef load_bundle(const char* fwkName)
 {
+    if (strchr(fwkName, '/')) { // framework dir is set by user
+        auto name = CFStringCreateWithCString(kCFAllocatorDefault, fwkName, kCFStringEncodingUTF8);
+        auto fwkUrl = CFURLCreateWithString(nullptr, name, nullptr);
+        CFRelease(name);
+        if (!fwkUrl)
+            return nullptr;
+        auto s = CFStringCreateWithFormat(nullptr, nullptr, CFSTR("%@"), (CFTypeRef)fwkUrl);
+        clog << "braw bundle url: " << CFStringGetCStringPtr(s, kCFStringEncodingUTF8) << endl;
+        CFRelease(s);
+        auto b = CFBundleCreate(kCFAllocatorDefault, fwkUrl);
+        CFRelease(fwkUrl);
+        return b;
+    }
     if (auto m = CFBundleGetMainBundle()) {
         if (auto url = CFBundleCopyBundleURL(m)) {
             if (auto ext = CFURLCopyPathExtension(url); ext) {
@@ -110,20 +124,34 @@ inline string to_string(const wchar_t* ws)
 
 inline string to_string(const char* s) { return s;}
 
-static auto load_once()
+static auto load()
 {
     const auto name_default =
 #if (_WIN32+0)
-        TEXT("BlackmagicRawAPI.dll")
+        "BlackmagicRawAPI.dll"
 #elif (__APPLE__+0)
         "BlackmagicRawAPI.framework"
 #else
         "libBlackmagicRawAPI.so"
 #endif
         ;
-    static auto dso = dlopen(name_default, RTLD_NOW | RTLD_LOCAL);
+
+    const auto v = mdk::GetGlobalOption("BRAWSDK_DIR");
+    if (const auto s = get_if<string>(&v)) {
+        if (const auto dso = dlopen((*s + "/" + name_default).data(), RTLD_NOW | RTLD_LOCAL)) {
+            return dso;
+        }
+        clog << "Failed to load BRAW runtime in $BRAWSDK_DIR: " + *s << endl;
+    }
+    auto dso = dlopen(name_default, RTLD_NOW | RTLD_LOCAL);
     if (!dso)
-        clog << "Failed to load BRAW runtime: " << to_string(name_default) << endl;
+        clog << "Failed to load BRAW runtime: " + to_string(name_default) << endl;
+    return dso;
+}
+
+static auto load_once()
+{
+    static const auto dso = load();
     return dso;
 }
 
