@@ -14,14 +14,14 @@ class BStr
 {
 public:
 #if (_WIN32 + 0)
-    using StrTye = BSTR; // WCHAR*: length prefix + data string + 0x0000
+    using StrType = BSTR; // WCHAR*: length prefix + data string + 0x0000
 #elif (__APPLE__ + 0)
-    using StrTye = CFStringRef;
+    using StrType = CFStringRef;
 #else
-    using StrTye = char*;
+    using StrType = char*;
 #endif
 
-    static std::string to_string(StrTye s) {
+    static std::string to_string(StrType s) {
         if (!s)
             return {};
 #if (_WIN32 + 0)
@@ -72,7 +72,7 @@ public:
     }
 
 // release and get address of. BRawStr is allocated or ref added in GetXXX(BRawStr)
-    StrTye* operator&() {
+    StrType* operator&() {
         release();
         return &s_;
     }
@@ -81,7 +81,7 @@ public:
         release();
     }
 
-    StrTye get() {
+    StrType get() {
         return s_;
     }
 
@@ -102,5 +102,5 @@ private:
         s_ = {};
     }
 
-    StrTye s_{};
+    StrType s_{};
 };
