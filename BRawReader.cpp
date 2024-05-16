@@ -5,7 +5,7 @@
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
 // hdr (gamma, gamut) attributes
 // TODO: save sidecar, trim clip
-//#define BRAW_MAJOR 2
+//#define BRAW_MAJOR 4
 
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
@@ -111,7 +111,8 @@ private:
     shared_ptr<bool> loaded_;
 };
 
-static void get_attributes(IBlackmagicRawClip* clip, function<void(const string&,const string&)>&& cb)
+template<typename Callback> // function<void(const string&,const string&)>
+static void get_attributes(IBlackmagicRawClip* clip, Callback&& cb)
 {
     ComPtr<IBlackmagicRawClipProcessingAttributes> a;
     MS_ENSURE(clip->QueryInterface(IID_IBlackmagicRawClipProcessingAttributes, &a));
@@ -321,6 +322,11 @@ PixelFormat to(BlackmagicRawResourceFormat fmt)
     //case blackmagicRawResourceFormatRGBF32: return PixelFormat::RGBF32LE;
     case blackmagicRawResourceFormatRGBF32Planar: return PixelFormat::RGBPF32LE; // "rgbpf32le"
     case blackmagicRawResourceFormatBGRAF32: return PixelFormat::BGRAF32LE; // "bgraf32le"
+    case blackmagicRawResourceFormatRGBAF32: return PixelFormat::RGBAF32LE; // "rgbaf32le"
+    case blackmagicRawResourceFormatRGBF16: return PixelFormat::RGBF16LE; // "rgbf16le"
+    case blackmagicRawResourceFormatRGBAF16: return PixelFormat::RGBAF16LE; // "rgbf16le
+    //case blackmagicRawResourceFormatBGRAF16: return PixelFormat::BGRAF16LE; // "bgraf16le"
+    //case blackmagicRawResourceFormatRGBF16Planar: return PixelFormat::RGBPF16LE; // "rgbpf16le"
     default:
         return PixelFormat::Unknown;
     }
@@ -338,6 +344,9 @@ BlackmagicRawResourceFormat from(PixelFormat fmt)
     //case PixelFormat::RGBF32LE: return blackmagicRawResourceFormatRGBF32;
     case PixelFormat::RGBPF32LE: return blackmagicRawResourceFormatRGBF32Planar;
     case PixelFormat::BGRAF32LE: return blackmagicRawResourceFormatBGRAF32;
+    case PixelFormat::RGBAF32LE: return blackmagicRawResourceFormatRGBAF32;
+    case PixelFormat::RGBF16LE: return blackmagicRawResourceFormatRGBF16;
+    case PixelFormat::RGBAF16LE: return blackmagicRawResourceFormatRGBAF16;
     default:
         return blackmagicRawResourceFormatRGBAU8;
     }
@@ -365,8 +374,9 @@ bool BRawReader::load()
     MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
 #if (BRAW_MAJOR + 0) >= 3
     BStr ver;
-    if (SUCCEEDED(config->GetVersion(&ver)))
-        clog << "IBlackmagicRawConfiguration Version: " << ver.to_string() << endl;
+    MS_WARN(config->GetVersion(&ver));
+    if (const auto vs = ver.to_string(); !vs.empty())
+        clog << "IBlackmagicRawConfiguration Version: " + vs << endl;
 #endif
     parseDecoderOptions();
 
@@ -443,7 +453,7 @@ bool BRawReader::load()
 bool BRawReader::unload()
 {
     {
-        lock_guard lock(unload_mtx_);
+        const lock_guard lock(unload_mtx_);
         update(MediaStatus::Unloaded);
     }
     if (!codec_) {
@@ -571,7 +581,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     index_ = index; // update index_ before seekComplete because pending seek may be executed in seekCompleted
     if (seekId > 0 && seekWaitFrame) {
         seeking_--;
-        lock_guard lock(unload_mtx_);
+        const lock_guard lock(unload_mtx_);
         if (test_flag(mediaStatus() & MediaStatus::Loaded)) {
             if (seeking_ > 0/* && seekId == 0*/) { // ?
                 seekComplete(duration_ * index / frames_, seekId); // may create a new seek
@@ -665,7 +675,7 @@ typedef unsigned int CUdeviceptr;
                 cuframe.stride[i] = fmt.bytesPerLine(width, i);
             }
             processedImage->AddRef();
-            weak_ptr<bool> wp = loaded_;
+            const weak_ptr<bool> wp = loaded_;
             auto nativeBuf = pool_->getBuffer(&cuframe, [=]{
                 auto sp = wp.lock();
                 if (!sp)
@@ -710,7 +720,7 @@ typedef unsigned int CUdeviceptr;
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
     frame.setDuration((double)duration_/(double)frames_ / 1000.0);
 
-    lock_guard lock(unload_mtx_);
+    const lock_guard lock(unload_mtx_);
     // FIXME: stop playback in onFrame() callback results in dead lock in braw(FlushJobs will wait this function finished)
     if (seekId > 0) {
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
@@ -771,12 +781,24 @@ bool BRawReader::setupPipeline()
         MS_WARN(it->GetInterop(&interop));
         MS_WARN(it->CreateDevice(&dev)); // maybe E_FAIL
         string name = "?";
+        vector<BlackmagicRawResourceFormat> fmts;
         if (dev) {
             BStr nameb;
             if (SUCCEEDED(dev->GetName(&nameb)))
                 name = nameb.to_string();
+#if (BRAW_MAJOR + 0) >= 4 // available in 3.3 runtime
+            uint32_t nb_fmts = 0;
+            MS_WARN(dev->GetSupportedResourceFormats(nullptr, &nb_fmts));
+            if (nb_fmts > 0) {
+                fmts.resize(nb_fmts);
+                MS_WARN(dev->GetSupportedResourceFormats(&fmts[0], &nb_fmts));
+            }
+#endif
         }
-        clog << "braw pipeline: " << FOURCC_name(pipeline) << ", interop: " << FOURCC_name(interop) << ", device: '" << name << "' - " << dev.Get();
+        clog << "braw pipeline: " + FOURCC_name(pipeline) + ", interop: " + FOURCC_name(interop) + ", device: '" + name + "' - " << dev.Get();
+        for (const auto& fmt : fmts)
+            clog << ", " + FOURCC_name(fmt);
+        clog << endl;
         if (!deviceName_.empty()) {
             transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c);});
             if (name.find(deviceName_) != string::npos) {
@@ -866,7 +888,7 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
     case "interop"_svh:
         interop_ = val == "opengl" ? blackmagicRawInteropOpenGL : blackmagicRawInteropNone;
         return;
-    case "device"_svh:
+    case "device"_svh: // cpu device names: NEON, AVX2, AVX
         deviceName_ = val;
         transform(deviceName_.begin(), deviceName_.end(), deviceName_.begin(), [](unsigned char c){ return std::tolower(c);});
         return;
