@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(mdk-braw VERSION 0.25.0 DESCRIPTION "mdk braw plugin")
+project(mdk-braw VERSION 0.29.1 DESCRIPTION "mdk braw plugin")
 set(PROJECT_VERSION_TWEAK 0)
 
 set(MDKSDK "${CMAKE_CURRENT_SOURCE_DIR}/mdk-sdk" CACHE STRING "libmdk SDK dir")
@@ -10,7 +10,7 @@ if(NOT CMAKE_PROJECT_NAME STREQUAL mdk) # not build in source tree
 endif()
 find_package(MDK)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Threads)

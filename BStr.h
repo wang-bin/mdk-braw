@@ -4,6 +4,7 @@
 
 #pragma once
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <string.h>
 #if (_WIN32 + 0)
