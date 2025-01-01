@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2019-2025 WangBin <wbsecg1 at gmail.com>
  */
 #pragma once
 #include <string_view>
@@ -49,12 +49,12 @@ namespace detail
     }
 }    // namespace detail
 
-constexpr uint32_t operator"" _svh(char const* s, size_t count)
+constexpr uint32_t operator""_svh(char const* s, size_t count)
 {
     return detail::fnv1ah32::hash(s, count);
 }
 
-constexpr uint32_t operator"" _svh2(char const* s, size_t count)
+constexpr uint32_t operator""_svh2(char const* s, size_t count)
 {
     return detail::fnv1a_32(s, count);
 }
