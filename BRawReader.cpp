@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2025 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
@@ -657,40 +657,23 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     }
     if (!imageData[0]) {
         if (type == blackmagicRawResourceTypeBufferCUDA) {
-#if defined(__x86_64) || defined(AMD64) || defined(_M_AMD64) || (_LP64+0) > 0 || defined(__aarch64__)
-typedef unsigned long long CUdeviceptr;
-#else
-typedef unsigned int CUdeviceptr;
-#endif
-            struct {
-                CUdeviceptr cuptr[3]{};
-                int stride[3]{};
-                PixelFormat pixfmt;
-            } cuframe{};
-            cuframe.pixfmt = fmt;
-            cuframe.cuptr[0] = (CUdeviceptr)res;
-            cuframe.stride[0] = fmt.bytesPerLine(width, 0);
-            for (int i = 1; i < fmt.planeCount(); ++i) {
-                cuframe.cuptr[i] = CUdeviceptr(cuframe.cuptr[i-1] + cuframe.stride[i-1] * fmt.height(height, i-1));
-                cuframe.stride[i] = fmt.bytesPerLine(width, i);
-            }
             processedImage->AddRef();
             const weak_ptr<bool> wp = loaded_;
-            auto nativeBuf = pool_->getBuffer(&cuframe, [=]{
-                auto sp = wp.lock();
-                if (!sp)
-                    return;
-                processedImage->Release(); // invalid if braw objects are destroyed in unload()?
-            });
+            CUDAResource cures{
+                .ptr = {res},
+                .width = (int)width,
+                .height = (int)height,
+                .format = fmt,
+                .unref = [=]{
+                    auto sp = wp.lock();
+                    if (!sp)
+                        return;
+                    processedImage->Release(); // invalid if braw objects are destroyed in unload()?
+                },
+            };
+            frame = VideoFrame::from(&pool_, cures);
             if (copy_) {
-                NativeVideoBuffer::MapParameter mp;
-                mp.width[0] = width;
-                mp.height[0] = height;
-                mp.stride[0] = mp.stride[1] = cuframe.stride[0];
-                auto ma = static_cast<NativeVideoBuffer::MemoryArray*>(nativeBuf->map(NativeVideoBuffer::Type::HostMemory, &mp));
-                frame.setBuffers((const uint8_t **)ma->data, mp.stride);
-            } else {
-                frame.setNativeBuffer(nativeBuf);
+                frame = frame.to(fmt);
             }
         } else {
             BRawVideoBuffers bb{};
