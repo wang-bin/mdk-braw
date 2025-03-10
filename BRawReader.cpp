@@ -106,6 +106,8 @@ private:
     atomic<int> seeking_ = 0;
     atomic<uint64_t> index_ = 0; // for stepping frame forward/backward
 
+    void* context_ = nullptr;
+    void* cmdQueue_ = nullptr;
     NativeVideoBufferPoolRef pool_;
     mutex unload_mtx_;
     shared_ptr<bool> loaded_;
@@ -464,11 +466,7 @@ bool BRawReader::unload()
     codec_->FlushJobs(); // must wait all jobs to safe release
     frameAvailable(VideoFrame().setTimestamp(TimestampEOS)); // clear vo frames
     if (processedRes_) {
-        BlackmagicRawPipeline pipeline;
-        void* context = nullptr;
-        void* cmdQueue = nullptr;
-        MS_WARN(dev_->GetPipeline(&pipeline, &context, &cmdQueue));
-        MS_WARN(resMgr_->ReleaseResource(context, cmdQueue, processedRes_, processedType_));
+        MS_WARN(resMgr_->ReleaseResource(context_, cmdQueue_, processedRes_, processedType_));
         processedRes_ = nullptr;
     }
     if (processedResCpu_) {
@@ -664,6 +662,8 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
                 .width = (int)width,
                 .height = (int)height,
                 .format = fmt,
+                .context = context_,
+                .stream = cmdQueue_,
                 .unref = [=]{
                     auto sp = wp.lock();
                     if (!sp)
@@ -809,6 +809,9 @@ bool BRawReader::setupPipeline()
     BlackmagicRawResourceFormat bestFormat;
     MS_ENSURE(interop->GetPreferredResourceFormat(&bestFormat), false);
     clog << "GetPreferredResourceFormat: " << to(bestFormat) << endl;
+
+    BlackmagicRawPipeline pipeline;
+    MS_WARN(dev_->GetPipeline(&pipeline, &context_, &cmdQueue_));
 
     if (pipeline_selected == blackmagicRawPipelineCUDA)
         pool_ = NativeVideoBufferPool::create("CUDA"); // better support d3d11/opengl/opengles
