@@ -253,7 +253,7 @@ static void read_metadata(IBlackmagicRawMetadataIterator* i, unordered_map<strin
     //    clog << k << " = " << v << endl;
 }
 
-void to(MediaInfo& info, const ComPtr<IBlackmagicRawClip>& clip)
+static void to(MediaInfo& info, const ComPtr<IBlackmagicRawClip>& clip)
 {
     info.format = "braw";
 
@@ -312,7 +312,7 @@ void to(MediaInfo& info, const ComPtr<IBlackmagicRawClip>& clip)
     info.duration = std::max<int64_t>(info.duration, asi.duration);
 }
 
-PixelFormat to(BlackmagicRawResourceFormat fmt)
+static PixelFormat to(BlackmagicRawResourceFormat fmt)
 {
     switch (fmt) {
     case blackmagicRawResourceFormatRGBAU8: return PixelFormat::RGBA; // "rgba"
@@ -334,7 +334,7 @@ PixelFormat to(BlackmagicRawResourceFormat fmt)
     }
 }
 
-BlackmagicRawResourceFormat from(PixelFormat fmt)
+static BlackmagicRawResourceFormat from(PixelFormat fmt)
 {
     switch (fmt) {
     case PixelFormat::RGBA: return blackmagicRawResourceFormatRGBAU8;
@@ -545,6 +545,7 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
     MS_WARN(frame->SetResolutionScale(scale_));
     MS_ENSURE(frame->SetResourceFormat(from(format_)));
     IBlackmagicRawJob* decodeAndProcessJob = nullptr; // NOT ComPtr!
+    //IBlackmagicRawClipProcessingAttributes *a = {}; // TODO: color science gen, gamma, gamut(from IBlackmagicRawToneCurve->GetToneCurve())
     MS_ENSURE(frame->CreateJobDecodeAndProcessFrame(nullptr, nullptr, &decodeAndProcessJob));
     job = decodeAndProcessJob;
     data = new UserData();
@@ -665,10 +666,8 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
                 .context = context_,
                 .stream = cmdQueue_,
                 .unref = [=]{
-                    auto sp = wp.lock();
-                    if (!sp)
-                        return;
-                    processedImage->Release(); // invalid if braw objects are destroyed in unload()?
+                    if (auto sp = wp.lock())
+                        processedImage->Release(); // invalid if braw objects are destroyed in unload()?
                 },
             };
             frame = VideoFrame::from(&pool_, cures);
@@ -784,7 +783,7 @@ bool BRawReader::setupPipeline()
         clog << endl;
         if (!deviceName_.empty()) {
             transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c);});
-            if (name.find(deviceName_) != string::npos) {
+            if (name.contains(deviceName_)) {
                 dev_ = dev;
                 clog << ". Selected";
             }
@@ -883,12 +882,12 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
         return;
     case "scale"_svh:
     case "size"_svh: { // widthxheight or width(height=width)
-        if (val.find('x') != string::npos) { // closest scale to target resolution
+        if (val.contains('x')) { // closest scale to target resolution
             char* s = nullptr;
             scaleToW_ = strtoul(val.data(), &s, 10);
             if (s && s[0] == 'x')
                 scaleToH_ = strtoul(s + 1, nullptr, 10);
-        } else if (val.find("1/") == 0) {
+        } else if (val.starts_with("1/")) {
             const auto s = atoi(&val[2]);
             if (s >= 6) {
                 scale_ = blackmagicRawResolutionScaleEighth;
@@ -913,15 +912,11 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
     // TODO: if property is a clip attribute and exists, guess VARIANT then SetClipAttribute(). if not exist, insert only
 }
 
-
-void register_framereader_braw() {
-    FrameReader::registerOnce("BRAW", []{return new BRawReader();}, {{"braw"}});
-}
 MDK_NS_END
 
 // project name must be braw or mdk-braw
 MDK_PLUGIN(braw) {
     using namespace MDK_NS;
-    register_framereader_braw();
+    FrameReader::registerOnce("BRAW", []{return new BRawReader();}, {{"braw"}});
     return MDK_ABI_VERSION;
 }

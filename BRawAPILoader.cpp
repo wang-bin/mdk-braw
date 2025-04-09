@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2025 WangBin <wbsecg1 at gmail.com>
  */
 
 #include "BlackmagicRawAPI.h"
@@ -49,7 +49,7 @@ using namespace std;
 #define BRAW_API_EXPAND(EXPR) EXPR
 #define BRAW_API_EXPAND_T_V(R, F, ARG_T, ARG_T_V, ARG_V) \
     R F ARG_T_V { \
-        static auto fp = (decltype(&F))dlsym(load_once(), #F); \
+        static auto fp = (decltype(&(F)))dlsym(load_once(), #F); \
         if (!fp) \
             return default_rv<R>(); \
         return fp ARG_V; \
@@ -75,6 +75,7 @@ static CFBundleRef load_bundle(const char* fwkName)
         return b;
     }
     if (auto m = CFBundleGetMainBundle()) {
+        CFRetain(m);
         if (auto url = CFBundleCopyBundleURL(m)) {
             if (auto ext = CFURLCopyPathExtension(url); ext) {
                 if (CFStringCompare(ext, CFSTR("appex"), 0) == kCFCompareEqualTo) {
@@ -107,22 +108,26 @@ static CFBundleRef load_bundle(const char* fwkName)
                 CFRelease(s);
                 auto b = CFBundleCreate(kCFAllocatorDefault, fwkUrl);
                 CFRelease(fwkUrl);
+                CFRelease(m);
                 return b;
             }
         }
+        CFRelease(m);
     }
     return nullptr;
 }
 #endif
 
-inline string to_string(const wchar_t* ws)
+[[maybe_unused]]
+static inline string to_string(const wchar_t* ws)
 {
     string s(snprintf(nullptr, 0, "%ls", ws), 0);
     snprintf(&s[0], s.size() + 1, "%ls", ws);
     return s;
 }
 
-inline string to_string(const char* s) { return s;}
+[[maybe_unused]]
+static inline string to_string(const char* s) { return s;}
 
 static auto load()
 {
