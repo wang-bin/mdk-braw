@@ -1,5 +1,5 @@
 /* -LICENSE-START-
-** Copyright (c) 2024 Blackmagic Design
+** Copyright (c) 2025 Blackmagic Design
 **
 ** Permission is hereby granted, free of charge, to any person or organization
 ** obtaining a copy of the software and accompanying documentation covered by
@@ -28,9 +28,10 @@
 #ifndef BMD_BLACKMAGICRAWAPI_H
 #define BMD_BLACKMAGICRAWAPI_H
 
-#ifndef BRAW_MAJOR
-# define BRAW_MAJOR 3
-#endif
+#ifndef BRAW_VERSION
+# define BRAW_VERSION 300 // 100*major + 10*minor
+#endif // BRAW_VERSION
+#define BRAW_MAJOR (BRAW_VERSION / 100)
 
 #ifndef BMD_CONST
     #if defined(_MSC_VER)
@@ -85,12 +86,18 @@ typedef char* BRawStr;
 #endif
 
 // Type Declarations
-#if (BRAW_MAJOR + 0) >= 4
-#define IID_IBlackmagicRawPipelineDevice IID_IBlackmagicRawPipelineDevice4
+#if (BRAW_VERSION + 0) >= 450
+# define IID_IBlackmagicRawClipResolutions IID_IBlackmagicRawClipResolutions4_5
+# define IID_IBlackmagicRawPipelineDevice IID_IBlackmagicRawPipelineDevice4_5
 #else
-#define IID_IBlackmagicRawPipelineDevice IID_IBlackmagicRawPipelineDevice2
+# define IID_IBlackmagicRawClipResolutions IID_IBlackmagicRawClipResolutions2
+# if (BRAW_VERSION + 0) >= 400
+#   define IID_IBlackmagicRawPipelineDevice IID_IBlackmagicRawPipelineDevice4
+# else
+#   define IID_IBlackmagicRawPipelineDevice IID_IBlackmagicRawPipelineDevice2
+# endif
 #endif
-#if (BRAW_MAJOR + 0) >= 3
+#if (BRAW_VERSION + 0) >= 300
 #define IID_IBlackmagicRaw IID_IBlackmagicRaw3
 #define IID_IBlackmagicRawFactory IID_IBlackmagicRawFactory3
 #define IID_IBlackmagicRawConfiguration IID_IBlackmagicRawConfiguration3
@@ -117,6 +124,7 @@ BMD_CONST REFIID IID_IBlackmagicRawPipelineDeviceIterator         = /* 32D3385F-
 BMD_CONST REFIID IID_IBlackmagicRawOpenGLInteropHelper            = /* 86444C8A-4398-4364-9166-7D10F41C315E */ CFUUIDBytes{ 0x86,0x44,0x4C,0x8A,0x43,0x98,0x43,0x64,0x91,0x66,0x7D,0x10,0xF4,0x1C,0x31,0x5E };
 BMD_CONST REFIID IID_IBlackmagicRawPipelineDevice2                = /* 2B0D350D-8C17-431F-88AD-1E7945DF2F9F */ CFUUIDBytes{ 0x2B,0x0D,0x35,0x0D,0x8C,0x17,0x43,0x1F,0x88,0xAD,0x1E,0x79,0x45,0xDF,0x2F,0x9F };
 BMD_CONST REFIID IID_IBlackmagicRawPipelineDevice4                = /* 67BB92E8-AD7E-432E-8BA5-E688A2A63F2F */ CFUUIDBytes{ 0x67,0xBB,0x92,0xE8,0xAD,0x7E,0x43,0x2E,0x8B,0xA5,0xE6,0x88,0xA2,0xA6,0x3F,0x2F };
+BMD_CONST REFIID IID_IBlackmagicRawPipelineDevice4_5              = /* 5C7B0A9B-CF2C-4AB3-84C1-E1C7902360C8 */ CFUUIDBytes{ 0x5C,0x7B,0x0A,0x9B,0xCF,0x2C,0x4A,0xB3,0x84,0xC1,0xE1,0xC7,0x90,0x23,0x60,0xC8 };
 BMD_CONST REFIID IID_IBlackmagicRawToneCurve                      = /* 7E40C13D-3575-46B5-B2B7-85DAE1EEFD77 */ CFUUIDBytes{ 0x7E,0x40,0xC1,0x3D,0x35,0x75,0x46,0xB5,0xB2,0xB7,0x85,0xDA,0xE1,0xEE,0xFD,0x77 };
 BMD_CONST REFIID IID_IBlackmagicRawConfiguration3                 = /* 267E9866-FB40-4BFB-8BF8-96EA3F7DA36E */ CFUUIDBytes{ 0x26,0x7E,0x98,0x66,0xFB,0x40,0x4B,0xFB,0x8B,0xF8,0x96,0xEA,0x3F,0x7D,0xA3,0x6E };
 BMD_CONST REFIID IID_IBlackmagicRawConfigurationEx                = /* ACE9078F-ABA0-4B26-A954-EDA108DADA5A */ CFUUIDBytes{ 0xAC,0xE9,0x07,0x8F,0xAB,0xA0,0x4B,0x26,0xA9,0x54,0xED,0xA1,0x08,0xDA,0xDA,0x5A };
@@ -139,7 +147,8 @@ BMD_CONST REFIID IID_IBlackmagicRawManualDecoderFlow1             = /* 278815A6-
 BMD_CONST REFIID IID_IBlackmagicRawManualDecoderFlow2             = /* DBEC4C39-B4C2-4A65-AA8C-2B3C7F4777E3 */ CFUUIDBytes{ 0xDB,0xEC,0x4C,0x39,0xB4,0xC2,0x4A,0x65,0xAA,0x8C,0x2B,0x3C,0x7F,0x47,0x77,0xE3 };
 BMD_CONST REFIID IID_IBlackmagicRawClip3                          = /* A2910203-787B-4BF2-A374-B1A459E2D351 */ CFUUIDBytes{ 0xA2,0x91,0x02,0x03,0x78,0x7B,0x4B,0xF2,0xA3,0x74,0xB1,0xA4,0x59,0xE2,0xD3,0x51 };
 BMD_CONST REFIID IID_IBlackmagicRawClipEx                         = /* D260C7D0-93BD-4D68-B600-93B4CAB7F870 */ CFUUIDBytes{ 0xD2,0x60,0xC7,0xD0,0x93,0xBD,0x4D,0x68,0xB6,0x00,0x93,0xB4,0xCA,0xB7,0xF8,0x70 };
-BMD_CONST REFIID IID_IBlackmagicRawClipResolutions                = /* 3070805E-ABE3-498C-9D77-8C991B2B77E5 */ CFUUIDBytes{ 0x30,0x70,0x80,0x5E,0xAB,0xE3,0x49,0x8C,0x9D,0x77,0x8C,0x99,0x1B,0x2B,0x77,0xE5 };
+BMD_CONST REFIID IID_IBlackmagicRawClipResolutions2               = /* 3070805E-ABE3-498C-9D77-8C991B2B77E5 */ CFUUIDBytes{ 0x30,0x70,0x80,0x5E,0xAB,0xE3,0x49,0x8C,0x9D,0x77,0x8C,0x99,0x1B,0x2B,0x77,0xE5 };
+BMD_CONST REFIID IID_IBlackmagicRawClipResolutions4_5             = /* C63C290F-525B-4EBE-AB56-87B010CACE19 */ CFUUIDBytes{ 0xC6,0x3C,0x29,0x0F,0x52,0x5B,0x4E,0xBE,0xAB,0x56,0x87,0xB0,0x10,0xCA,0xCE,0x19 };
 
 /* Enum BlackmagicRawVariantType - Variant types that may be stored as metadata */
 
@@ -154,6 +163,7 @@ enum {
     VT_R4 = 6,
     VT_BSTR = 7,
     VT_SAFEARRAY = 8,
+    VT_R8 = 9,
 };
 #endif
 typedef uint32_t BlackmagicRawVariantType;
@@ -167,6 +177,7 @@ enum _BlackmagicRawVariantType {
     blackmagicRawVariantTypeFloat32                              = VT_R4,
     blackmagicRawVariantTypeString                               = VT_BSTR,
     blackmagicRawVariantTypeSafeArray                            = VT_SAFEARRAY,
+    blackmagicRawVariantTypeFloat64                              = VT_R8,
 };
 
 /* Enum BlackmagicRawResourceType - Used in IBlackmagicRawResourceManager */
@@ -196,7 +207,7 @@ enum _BlackmagicRawResourceFormat {
     blackmagicRawResourceFormatRGBF16                            = /* 'f16s' */ 0x66313673,
     blackmagicRawResourceFormatRGBAF16                           = /* 'f16l' */ 0x6631366C,
     blackmagicRawResourceFormatBGRAF16                           = /* 'f16a' */ 0x66313661,
-    blackmagicRawResourceFormatRGBF16Planar
+    blackmagicRawResourceFormatRGBF16Planar                      = /* 'f16p' */ 0x66313670,
 };
 
 /* Enum BlackmagicRawResourceUsage - Used in IBlackmagicRawResourceManager */
@@ -329,6 +340,15 @@ enum _BlackmagicRawFlip {
     blackmagicRawFlipHorizontal                                  = /* 'flpx' */ 0x666C7078,
     blackmagicRawFlipVertical                                    = /* 'flpy' */ 0x666C7079,
     blackmagicRawFlipBoth                                        = /* 'flpb' */ 0x666C7062
+};
+
+/* Enum BlackmagicRawSizeLimit - Used in IBlackmagicRawConfigurationEx */
+// braw 4.5
+typedef uint32_t BlackmagicRawSizeLimit;
+enum _BlackmagicRawSizeLimit {
+    blackmagicRawSizeLimitNone                                   = /* 'szln' */ 0x737A6C6E,
+    blackmagicRawSizeLimitScale                                  = /* 'szsc' */ 0x737A7363,
+    blackmagicRawSizeLimitCrop                                   = /* 'szlc' */ 0x737A6C63
 };
 
 #if defined(__cplusplus)
@@ -495,12 +515,15 @@ public:
     virtual HRESULT GetPipeline (/* out */ BlackmagicRawPipeline* pipeline, /* out */ void** context, /* out */ void** commandQueue) = 0;
     virtual HRESULT GetPipelineName (/* out */ BRawStr* pipelineName) = 0;
     virtual HRESULT GetOpenGLInteropHelper (/* out */ IBlackmagicRawOpenGLInteropHelper** interopHelper) = 0;
-#if (BRAW_MAJOR + 0) >= 4
+#if (BRAW_VERSION + 0) >= 400
     virtual HRESULT GetSupportedResourceFormats (/* out */ BlackmagicRawResourceFormat* array /* optional */, /* in, out */ uint32_t* arrayElementCount /* optional */) = 0;
+# if (BRAW_VERSION + 0) >= 450
+    virtual HRESULT GetMaximumTextureSize (/* out */ uint32_t* maximumWidth, /* out */ uint32_t* maximumHeight) = 0;
+# endif
 #else
 protected:
     virtual ~IBlackmagicRawPipelineDevice () {} // call Release method to drop reference count
-#endif // (BRAW_MAJOR + 0) >= 4
+#endif // (BRAW_VERSION + 0) >= 400
 };
 
 /* Interface IBlackmagicRawToneCurve - Functions which provide useful tone curve operations */
@@ -738,6 +761,22 @@ protected:
     virtual ~IBlackmagicRawClipGyroscopeMotion () {} // call Release method to drop reference count
 };
 
+/* Interface IBlackmagicRawClipPDAFData - Phase detection autofocus data for an opened movie clip */
+// 4.0
+class BMD_PUBLIC IBlackmagicRawClipPDAFData : public IUnknown
+{
+public:
+    virtual HRESULT GetSampleImageWidthInPixels (/* out */ uint32_t* sampleImageWidthInPixelsOut) = 0;
+    virtual HRESULT GetSampleImageHeightInPixels (/* out */ uint32_t* sampleImageHeightInPixelsOut) = 0;
+    virtual HRESULT GetSampleImageBytesPerPixel (/* out */ uint32_t* sampleImageBytesPerPixelOut) = 0;
+    virtual HRESULT GetSampleSize (/* out */ uint32_t* sampleSizeOut) = 0;
+    virtual HRESULT GetSampleCount (/* out */ uint32_t* sampleCountOut) = 0;
+    virtual HRESULT GetSampleImages (/* in */ uint64_t sampleIndex, /* out */ uint8_t* leftSampleImageDataOut, /* out */ uint8_t* rightSampleImageDataOut, /* in */ uint32_t sampleImageDataSize) = 0;
+
+protected:
+    virtual ~IBlackmagicRawClipPDAFData () {} // call Release method to drop reference count
+};
+
 /* Interface IBlackmagicRawFrame - Frame of a clip */
 
 class BMD_PUBLIC IBlackmagicRawFrame : public IUnknown
@@ -857,8 +896,11 @@ class BMD_PUBLIC IBlackmagicRawClipResolutions : public IUnknown
 public:
     virtual HRESULT GetResolutionCount (/* out */ uint32_t* resolutionCount) = 0;
     virtual HRESULT GetResolution (/* in */ uint32_t resolutionIndex, /* out */ uint32_t* resolutionWidthPixels, /* out */ uint32_t* resolutionHeightPixels) = 0;
+#if (BRAW_VERSION + 0) >= 450
+    virtual HRESULT GetRecordedResolution (/* in */ uint32_t resolutionIndex, /* out */ uint32_t* recordedResolutionWidthPixels, /* out */ uint32_t* recordedResolutionHeightPixels) = 0;
+#endif
     virtual HRESULT GetClosestResolutionForScale (/* in */ BlackmagicRawResolutionScale resolutionScale, /* out */ uint32_t* resolutionWidthPixels, /* out */ uint32_t* resolutionHeightPixels) = 0;
-#if (BRAW_MAJOR + 0) >= 3
+#if (BRAW_VERSION + 0) >= 300
     virtual HRESULT GetClosestScaleForResolution (/* in */ uint32_t resolutionWidthPixels, /* in */ uint32_t resolutionHeightPixels, /* out */ BlackmagicRawResolutionScale* resolutionScale) = 0;
 #else
     virtual HRESULT GetClosestScaleForResolution (/* in */ uint32_t resolutionWidthPixels, /* in */ uint32_t resolutionHeightPixels, /* in */ bool requestUpsideDown, /* out */ BlackmagicRawResolutionScale* resolutionScale) = 0;

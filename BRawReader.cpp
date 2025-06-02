@@ -5,7 +5,7 @@
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
 // hdr (gamma, gamut) attributes
 // TODO: save sidecar, trim clip
-//#define BRAW_MAJOR 4
+//#define BRAW_VERSION 400
 
 #include "mdk/FrameReader.h"
 #include "mdk/MediaInfo.h"
@@ -363,7 +363,7 @@ BRawReader::BRawReader()
         clog << "BlackmagicRawAPI is not available!" << endl;
         return;
     }
-
+    clog << "Build with BRAW SDK API " << BRAW_VERSION << endl;
 }
 
 bool BRawReader::load()
