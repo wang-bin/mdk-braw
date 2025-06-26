@@ -29,7 +29,7 @@
 #define BMD_BLACKMAGICRAWAPI_H
 
 #ifndef BRAW_VERSION
-# define BRAW_VERSION 300 // 100*major + 10*minor
+# define BRAW_VERSION 450 // 100*major + 10*minor
 #endif // BRAW_VERSION
 #define BRAW_MAJOR (BRAW_VERSION / 100)
 
