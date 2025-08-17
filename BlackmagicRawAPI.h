@@ -136,6 +136,7 @@ BMD_CONST REFIID IID_IBlackmagicRawFrameProcessingAttributes      = /* 5F7C5C0F-
 BMD_CONST REFIID IID_IBlackmagicRawPost3DLUT3                     = /* 86052BC4-0231-48C6-B3C8-C771112AAD68 */ CFUUIDBytes{ 0x86,0x05,0x2B,0xC4,0x02,0x31,0x48,0xC6,0xB3,0xC8,0xC7,0x71,0x11,0x2A,0xAD,0x68 };
 BMD_CONST REFIID IID_IBlackmagicRawProcessedImage                 = /* D87A0F72-A883-42BB-8488-0089411C5035 */ CFUUIDBytes{ 0xD8,0x7A,0x0F,0x72,0xA8,0x83,0x42,0xBB,0x84,0x88,0x00,0x89,0x41,0x1C,0x50,0x35 };
 BMD_CONST REFIID IID_IBlackmagicRawJob                            = /* 34C05ACF-7118-45EA-8B71-887E0515395D */ CFUUIDBytes{ 0x34,0xC0,0x5A,0xCF,0x71,0x18,0x45,0xEA,0x8B,0x71,0x88,0x7E,0x05,0x15,0x39,0x5D };
+BMD_CONST REFIID IID_IBlackmagicRawReadJobHints                   = /* 1069F99C-A4E2-415A-91C4-5E0CE0C6AF77 */ CFUUIDBytes{ 0x10,0x69,0xF9,0x9C,0xA4,0xE2,0x41,0x5A,0x91,0xC4,0x5E,0x0C,0xE0,0xC6,0xAF,0x77 };
 BMD_CONST REFIID IID_IBlackmagicRawCallback                       = /* E9F98FAC-33DB-4A65-BB94-8A82B027AED0 */ CFUUIDBytes{ 0xE9,0xF9,0x8F,0xAC,0x33,0xDB,0x4A,0x65,0xBB,0x94,0x8A,0x82,0xB0,0x27,0xAE,0xD0 };
 BMD_CONST REFIID IID_IBlackmagicRawClipAudio                      = /* 76D4ACED-E0D6-45BB-B547-56B7435B2A1D */ CFUUIDBytes{ 0x76,0xD4,0xAC,0xED,0xE0,0xD6,0x45,0xBB,0xB5,0x47,0x56,0xB7,0x43,0x5B,0x2A,0x1D };
 BMD_CONST REFIID IID_IBlackmagicRawClipAccelerometerMotion        = /* 983AACBB-F469-40C9-AA81-345B0B7CCD05 */ CFUUIDBytes{ 0x98,0x3A,0xAC,0xBB,0xF4,0x69,0x40,0xC9,0xAA,0x81,0x34,0x5B,0x0B,0x7C,0xCD,0x05 };
@@ -143,10 +144,13 @@ BMD_CONST REFIID IID_IBlackmagicRawClipGyroscopeMotion            = /* 00543A2C-
 BMD_CONST REFIID IID_IBlackmagicRawClipPDAFData                   = /* AAE71534-F951-4062-B6A9-69B8808CD267 */ CFUUIDBytes{ 0xAA,0xE7,0x15,0x34,0xF9,0x51,0x40,0x62,0xB6,0xA9,0x69,0xB8,0x80,0x8C,0xD2,0x67 };
 BMD_CONST REFIID IID_IBlackmagicRawFrame                          = /* A500B253-1808-4EF2-8692-D23C692404EA */ CFUUIDBytes{ 0xA5,0x00,0xB2,0x53,0x18,0x08,0x4E,0xF2,0x86,0x92,0xD2,0x3C,0x69,0x24,0x04,0xEA };
 BMD_CONST REFIID IID_IBlackmagicRawFrameEx                        = /* F8C6C374-D7FB-4BD3-AD0B-C533464FF450 */ CFUUIDBytes{ 0xF8,0xC6,0xC3,0x74,0xD7,0xFB,0x4B,0xD3,0xAD,0x0B,0xC5,0x33,0x46,0x4F,0xF4,0x50 };
+BMD_CONST REFIID IID_IBlackmagicRawFrameMultiVideo                = /* 96AE962B-30A4-4904-813D-A9EFFE5953C2 */ CFUUIDBytes{ 0x96,0xAE,0x96,0x2B,0x30,0xA4,0x49,0x04,0x81,0x3D,0xA9,0xEF,0xFE,0x59,0x53,0xC2 };
 BMD_CONST REFIID IID_IBlackmagicRawManualDecoderFlow1             = /* 278815A6-A3C1-47C7-A0A6-6754DEAE5E7A */ CFUUIDBytes{ 0x27,0x88,0x15,0xA6,0xA3,0xC1,0x47,0xC7,0xA0,0xA6,0x67,0x54,0xDE,0xAE,0x5E,0x7A };
 BMD_CONST REFIID IID_IBlackmagicRawManualDecoderFlow2             = /* DBEC4C39-B4C2-4A65-AA8C-2B3C7F4777E3 */ CFUUIDBytes{ 0xDB,0xEC,0x4C,0x39,0xB4,0xC2,0x4A,0x65,0xAA,0x8C,0x2B,0x3C,0x7F,0x47,0x77,0xE3 };
 BMD_CONST REFIID IID_IBlackmagicRawClip3                          = /* A2910203-787B-4BF2-A374-B1A459E2D351 */ CFUUIDBytes{ 0xA2,0x91,0x02,0x03,0x78,0x7B,0x4B,0xF2,0xA3,0x74,0xB1,0xA4,0x59,0xE2,0xD3,0x51 };
 BMD_CONST REFIID IID_IBlackmagicRawClipEx                         = /* D260C7D0-93BD-4D68-B600-93B4CAB7F870 */ CFUUIDBytes{ 0xD2,0x60,0xC7,0xD0,0x93,0xBD,0x4D,0x68,0xB6,0x00,0x93,0xB4,0xCA,0xB7,0xF8,0x70 };
+BMD_CONST REFIID IID_IBlackmagicRawClipMultiVideo                 = /* C699E3E2-3268-4E08-8037-D5C4A2C5CE52 */ CFUUIDBytes{ 0xC6,0x99,0xE3,0xE2,0x32,0x68,0x4E,0x08,0x80,0x37,0xD5,0xC4,0xA2,0xC5,0xCE,0x52 };
+BMD_CONST REFIID IID_IBlackmagicRawClipImmersiveVideo             = /* 47D287A7-9148-4659-BFCF-C767A089A200 */ CFUUIDBytes{ 0x47,0xD2,0x87,0xA7,0x91,0x48,0x46,0x59,0xBF,0xCF,0xC7,0x67,0xA0,0x89,0xA2,0x00 };
 BMD_CONST REFIID IID_IBlackmagicRawClipResolutions2               = /* 3070805E-ABE3-498C-9D77-8C991B2B77E5 */ CFUUIDBytes{ 0x30,0x70,0x80,0x5E,0xAB,0xE3,0x49,0x8C,0x9D,0x77,0x8C,0x99,0x1B,0x2B,0x77,0xE5 };
 BMD_CONST REFIID IID_IBlackmagicRawClipResolutions4_5             = /* C63C290F-525B-4EBE-AB56-87B010CACE19 */ CFUUIDBytes{ 0xC6,0x3C,0x29,0x0F,0x52,0x5B,0x4E,0xBE,0xAB,0x56,0x87,0xB0,0x10,0xCA,0xCE,0x19 };
 
@@ -298,6 +302,18 @@ enum _BlackmagicRawFrameProcessingAttribute {
     blackmagicRawFrameProcessingAttributeAnalogGain              = /* 'agpf' */ 0x61677066	// float
 };
 
+/* Enum BlackmagicRawImmersiveAttribute - Variant types that may be stored as metadata */
+
+typedef uint32_t BlackmagicRawImmersiveAttribute;
+enum _BlackmagicRawImmersiveAttribute {
+    blackmagicRawImmersiveAttributeOpticalLensProcessingDataFileUUID = /* 'oldu' */ 0x6F6C6475,	// string
+    blackmagicRawImmersiveAttributeOpticalILPDFileName           = /* 'oldf' */ 0x6F6C6466,	// string
+    blackmagicRawImmersiveAttributeOpticalInteraxial             = /* 'olix' */ 0x6F6C6978,	// i8
+    blackmagicRawImmersiveAttributeOpticalProjectionKind         = /* 'olpk' */ 0x6F6C706B,	// string
+    blackmagicRawImmersiveAttributeOpticalCalibrationType        = /* 'olct' */ 0x6F6C6374,	// string
+    blackmagicRawImmersiveAttributeOpticalProjectionData         = /* 'olpd' */ 0x6F6C7064	// string
+};
+
 /* Enum BlackmagicRawInterop -  */
 
 typedef uint32_t BlackmagicRawInterop;
@@ -351,6 +367,14 @@ enum _BlackmagicRawSizeLimit {
     blackmagicRawSizeLimitCrop                                   = /* 'szlc' */ 0x737A6C63
 };
 
+/* Enum BlackmagicRawImmersiveVideoTrack -  */
+
+typedef uint32_t BlackmagicRawImmersiveVideoTrack;
+enum _BlackmagicRawImmersiveVideoTrack {
+    blackmagicRawImmersiveVideoTrackLeft                         = 0,
+    blackmagicRawImmersiveVideoTrackRight                        = 1
+};
+
 #if defined(__cplusplus)
 
 // Forward Declarations
@@ -372,6 +396,7 @@ class IBlackmagicRawFrameProcessingAttributes;
 class IBlackmagicRawPost3DLUT;
 class IBlackmagicRawProcessedImage;
 class IBlackmagicRawJob;
+class IBlackmagicRawReadJobHints;
 class IBlackmagicRawCallback;
 class IBlackmagicRawClipAudio;
 class IBlackmagicRawClipAccelerometerMotion;
@@ -379,10 +404,13 @@ class IBlackmagicRawClipGyroscopeMotion;
 class IBlackmagicRawClipPDAFData;
 class IBlackmagicRawFrame;
 class IBlackmagicRawFrameEx;
+class IBlackmagicRawFrameMultiVideo;
 class IBlackmagicRawManualDecoderFlow1;
 class IBlackmagicRawManualDecoderFlow2;
 class IBlackmagicRawClip;
 class IBlackmagicRawClipEx;
+class IBlackmagicRawClipMultiVideo;
+class IBlackmagicRawClipImmersiveVideo;
 class IBlackmagicRawClipResolutions;
 
 /* Struct SafeArrayBound - Dimensionality of a SafeArray */
@@ -699,6 +727,14 @@ protected:
     virtual ~IBlackmagicRawJob () {} // call Release method to drop reference count
 };
 
+/* Interface IBlackmagicRawReadJobHints - Read job hints */
+
+class BMD_PUBLIC IBlackmagicRawReadJobHints : public IUnknown
+{
+public:
+    virtual HRESULT SetReaderResolutionScale (/* in */ BlackmagicRawResolutionScale readerResolutionScale) = 0;
+};
+
 /* Interface IBlackmagicRawCallback - Callback for IBlackmagicRaw */
 
 class BMD_PUBLIC IBlackmagicRawCallback : public IUnknown
@@ -811,6 +847,17 @@ protected:
     virtual ~IBlackmagicRawFrameEx () {} // call Release method to drop reference count
 };
 
+/* Interface IBlackmagicRawFrameMultiVideo - provides extra information related to frames from multi video track files */
+
+class BMD_PUBLIC IBlackmagicRawFrameMultiVideo : public IUnknown
+{
+public:
+    virtual HRESULT GetVideoTrackIndex (/* out */ uint32_t* videoTrackIndex) = 0;
+
+protected:
+    virtual ~IBlackmagicRawFrameMultiVideo () {} // call Release method to drop reference count
+};
+
 /* Interface IBlackmagicRawManualDecoderFlow1 - Allowing manual decoding/processing of buffers, Flow1 is a pure CPU solution */
 
 class BMD_PUBLIC IBlackmagicRawManualDecoderFlow1 : public IUnknown
@@ -887,6 +934,39 @@ public:
 
 protected:
     virtual ~IBlackmagicRawClipEx () {} // call Release method to drop reference count
+};
+
+/* Interface IBlackmagicRawClipMultiVideo - Extended use of IBlackmagicRawClip, to support multi video track video clips */
+
+class BMD_PUBLIC IBlackmagicRawClipMultiVideo : public IUnknown
+{
+public:
+    virtual HRESULT GetVideoTrackCount (/* out */ uint32_t* videoTrackCount) = 0;
+    virtual HRESULT GetVideoFrameCount (/* in */ uint32_t videoTrackIndex, /* out */ uint64_t* videoFrameCount) = 0;
+    virtual HRESULT GetVideoTrackSource (/* in */ uint32_t videoTrackIndex, /* out */ uint32_t* videoSourceFourCC) = 0;
+    virtual HRESULT CreateJobReadFrame (/* in */ uint32_t videoTrackIndex, /* in */ uint64_t frameIndex, /* out */ IBlackmagicRawJob** job) = 0;	// Create a job o read a frame
+    virtual HRESULT GetBitStreamSizeBytes (/* in */ uint32_t videoTrackIndex, /* in */ uint64_t frameIndex, /* out */ uint32_t* bitStreamSizeBytes) = 0;
+    virtual HRESULT CreateJobReadFrameEx (/* in */ uint32_t videoTrackIndex, /* in */ uint64_t frameIndex, /* out */ void* bitStream /* optional */, /* in */ uint32_t bitStreamSizeBytes /* optional */, /* out */ IBlackmagicRawJob** job) = 0;
+
+protected:
+    virtual ~IBlackmagicRawClipMultiVideo () {} // call Release method to drop reference count
+};
+
+/* Interface IBlackmagicRawClipImmersiveVideo - Extended use of IBlackmagicRawClip, to support immersive video clips */
+
+class BMD_PUBLIC IBlackmagicRawClipImmersiveVideo : public IUnknown
+{
+public:
+    virtual HRESULT CreateJobImmersiveReadFrame (/* in */ BlackmagicRawImmersiveVideoTrack videoTrack, /* in */ uint64_t frameIndex, /* out */ IBlackmagicRawJob** job) = 0;	// Create a job to read a frame
+    virtual HRESULT GetImmersiveBitStreamSizeBytes (/* in */ BlackmagicRawImmersiveVideoTrack videoTrack, /* in */ uint64_t frameIndex, /* out */ uint32_t* bitStreamSizeBytes) = 0;
+    virtual HRESULT CreateJobImmersiveReadFrameEx (/* in */ BlackmagicRawImmersiveVideoTrack videoTrack, /* in */ uint64_t frameIndex, /* out */ void* bitStream /* optional */, /* in */ uint32_t bitStreamSizeBytes /* optional */, /* out */ IBlackmagicRawJob** job) = 0;
+    virtual HRESULT GetDistanceBetweenLenses (/* out */ uint32_t* distanceBetweenLenses) = 0;
+    virtual HRESULT GetComfortDisparityAdjustment (/* out */ int32_t* comfortDisparityAdjustment) = 0;
+    virtual HRESULT GetHorizontalFieldOfView (/* out */ uint32_t* horizontalFieldOfView) = 0;
+    virtual HRESULT GetImmersiveAttribute (/* in */ BlackmagicRawImmersiveAttribute attribute, /* out */ VARIANT* value) = 0;
+
+protected:
+    virtual ~IBlackmagicRawClipImmersiveVideo () {} // call Release method to drop reference count
 };
 
 /* Interface IBlackmagicRawClipResolutions - Supports querying of resolutions and/or scales for processed image results */
