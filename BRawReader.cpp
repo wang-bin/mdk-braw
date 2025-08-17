@@ -111,6 +111,7 @@ private:
     NativeVideoBufferPoolRef pool_;
     mutex unload_mtx_;
     shared_ptr<bool> loaded_;
+    shared_ptr<mutex> res_mtx_;
 };
 
 template<typename Callback> // function<void(const string&,const string&)>
@@ -376,7 +377,7 @@ bool BRawReader::load()
     MS_ENSURE(codec_->QueryInterface(IID_IBlackmagicRawConfiguration, (void**)&config), false);
 #if (BRAW_MAJOR + 0) >= 3
     BStr ver;
-    MS_WARN(config->GetVersion(&ver));
+    MS_WARN(config->GetVersion(&ver)); // FIXME: 0.0 on mac?
     if (const auto vs = ver.to_string(); !vs.empty())
         clog << "IBlackmagicRawConfiguration Version: " + vs << endl;
 #endif
@@ -403,6 +404,7 @@ bool BRawReader::load()
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
 
     loaded_ = make_shared<bool>();
+    res_mtx_ = make_shared<mutex>();
 
     MediaEvent e{};
     e.category = "decoder.video";
@@ -465,6 +467,7 @@ bool BRawReader::unload()
     // TODO: job->Abort();
     codec_->FlushJobs(); // must wait all jobs to safe release
     frameAvailable(VideoFrame().setTimestamp(TimestampEOS)); // clear vo frames
+    const unique_lock res_lock(*res_mtx_.get());
     if (processedRes_) {
         MS_WARN(resMgr_->ReleaseResource(context_, cmdQueue_, processedRes_, processedType_));
         processedRes_ = nullptr;
@@ -658,6 +661,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
         if (type == blackmagicRawResourceTypeBufferCUDA) {
             processedImage->AddRef();
             const weak_ptr<bool> wp = loaded_;
+            const weak_ptr<mutex> wm = res_mtx_;
             CUDAResource cures{
                 .ptr = {res},
                 .width = (int)width,
@@ -666,8 +670,13 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
                 .context = context_,
                 .stream = cmdQueue_,
                 .unref = [=]{
-                    if (auto sp = wp.lock())
+                    if (auto sm = wm.lock()) {
+                        const lock_guard lock(*sm);
+                        auto sp = wp.lock();
+                        if (!sp || !*sp)
+                            return;
                         processedImage->Release(); // invalid if braw objects are destroyed in unload()?
+                    }
                 },
             };
             frame = VideoFrame::from(&pool_, cures);
