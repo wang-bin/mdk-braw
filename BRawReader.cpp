@@ -371,6 +371,7 @@ bool BRawReader::load()
 {
     if (!factory_)
         return false;
+    res_mtx_ = make_shared<mutex>();
     MS_ENSURE(factory_->CreateCodec(&codec_), false);
     MS_ENSURE(codec_->SetCallback(this), false);
     ComPtr<IBlackmagicRawConfiguration> config;
@@ -404,7 +405,6 @@ bool BRawReader::load()
     MS_ENSURE(codec_->OpenClip(file.get(), &clip_), false);
 
     loaded_ = make_shared<bool>();
-    res_mtx_ = make_shared<mutex>();
 
     MediaEvent e{};
     e.category = "decoder.video";
