@@ -97,6 +97,8 @@ private:
     string deviceName_; // opencl device can be NVIDIA(adapter name? nv does not work and slow?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
     PixelFormat format_ = PixelFormat::RGBA;
     int copy_ = 0; // copy gpu resources. only works for cuda pipeline, otherwise still copies.
+    int max_err_ = 0; // stop decoding if nb_err_ >= max_err_
+    int nb_err_ = 0;
     BlackmagicRawResolutionScale scale_ = blackmagicRawResolutionScaleFull; // higher fps if scaled
     uint32_t scaleToW_ = 0; // closest down scale to target width
     uint32_t scaleToH_ = 0;
@@ -371,6 +373,7 @@ bool BRawReader::load()
 {
     if (!factory_)
         return false;
+    nb_err_ = 0;
     res_mtx_ = make_shared<mutex>();
     MS_ENSURE(factory_->CreateCodec(&codec_), false);
     MS_ENSURE(codec_->SetCallback(this), false);
@@ -539,11 +542,15 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
         seeking_--;
         seekComplete(duration_ * index / frames_, seekId);
     }
-    MS_WARN(result);// TODO: stop?
+    MS_WARN(result);
     if (FAILED(result)) {
         dispatchEvent({ .error = result, .category = "decoder.video", .detail = "braw read error"});
-        frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
-        thread([this]{ unload(); }).detach();
+        if (nb_err_++ >= max_err_ || index == frames_ - 1) {
+            frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
+            thread([this]{ unload(); }).detach();
+        } else {
+            readAt(index + 1);
+        }
         return;
     }
 
@@ -922,6 +929,12 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
     case "decoder"_svh:
     case "video.decoder"_svh:
         parse(val.data());
+        return;
+    case "error"_svh: {
+        max_err_ = stoi(val);
+        if (max_err_ < 0)
+            max_err_ = INT_MAX;
+    }
         return;
     }
     // TODO: if property is a clip attribute and exists, guess VARIANT then SetClipAttribute(). if not exist, insert only
