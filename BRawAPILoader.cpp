@@ -141,7 +141,7 @@ static auto load()
 #endif
         ;
 
-    const auto v = mdk::GetGlobalOption("BRAWSDK_DIR");
+    decltype(auto) v = mdk::GetGlobalOption("BRAWSDK_DIR");
     if (const auto s = get_if<string>(&v)) {
         if (const auto dso = dlopen((*s + "/" + name_default).data(), RTLD_NOW | RTLD_LOCAL)) {
             return dso;
