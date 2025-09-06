@@ -539,7 +539,13 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
         seeking_--;
         seekComplete(duration_ * index / frames_, seekId);
     }
-    MS_ENSURE(result);// TODO: stop?
+    MS_WARN(result);// TODO: stop?
+    if (FAILED(result)) {
+        dispatchEvent({ .error = result, .category = "decoder.video", .detail = "braw read error"});
+        frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
+        thread([this]{ unload(); }).detach();
+        return;
+    }
 
     if (index == frames_ - 1) {
         update(MediaStatus::Loaded|MediaStatus::End); // Options::ContinueAtEnd
