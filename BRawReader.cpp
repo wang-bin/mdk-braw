@@ -97,8 +97,6 @@ private:
     string deviceName_; // opencl device can be NVIDIA(adapter name? nv does not work and slow?), gfx90c(amd?). cpu device can be AVX2, AVX, SSE 4.1
     PixelFormat format_ = PixelFormat::RGBA;
     int copy_ = 0; // copy gpu resources. only works for cuda pipeline, otherwise still copies.
-    int max_err_ = 0; // stop decoding if nb_err_ >= max_err_
-    int nb_err_ = 0;
     BlackmagicRawResolutionScale scale_ = blackmagicRawResolutionScaleFull; // higher fps if scaled
     uint32_t scaleToW_ = 0; // closest down scale to target width
     uint32_t scaleToH_ = 0;
@@ -373,7 +371,6 @@ bool BRawReader::load()
 {
     if (!factory_)
         return false;
-    nb_err_ = 0;
     res_mtx_ = make_shared<mutex>();
     MS_ENSURE(factory_->CreateCodec(&codec_), false);
     MS_ENSURE(codec_->SetCallback(this), false);
@@ -460,7 +457,7 @@ bool BRawReader::load()
 bool BRawReader::unload()
 {
     {
-        const lock_guard lock(unload_mtx_);
+        const scoped_lock lock(unload_mtx_);
         update(MediaStatus::Unloaded);
     }
     if (!codec_) {
@@ -545,12 +542,6 @@ void BRawReader::ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlack
     MS_WARN(result);
     if (FAILED(result)) {
         dispatchEvent({ .error = result, .category = "decoder.video", .detail = "braw read error"});
-        if (nb_err_++ >= max_err_ || index == frames_ - 1) {
-            frameAvailable(VideoFrame().setTimestamp(TimestampEOS));
-            thread([this]{ unload(); }).detach();
-        } else {
-            readAt(index + 1);
-        }
         return;
     }
 
@@ -596,7 +587,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     index_ = index; // update index_ before seekComplete because pending seek may be executed in seekCompleted
     if (seekId > 0 && seekWaitFrame) {
         seeking_--;
-        const lock_guard lock(unload_mtx_);
+        const scoped_lock lock(unload_mtx_);
         if (test_flag(mediaStatus() & MediaStatus::Loaded)) {
             if (seeking_ > 0/* && seekId == 0*/) { // ?
                 seekComplete(duration_ * index / frames_, seekId); // may create a new seek
@@ -675,7 +666,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
             processedImage->AddRef();
             const weak_ptr<bool> wp = loaded_;
             const weak_ptr<mutex> wm = res_mtx_;
-            CUDAResource cures{
+            const CUDAResource cures{
                 .ptr = {res},
                 .width = (int)width,
                 .height = (int)height,
@@ -684,7 +675,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
                 .stream = cmdQueue_,
                 .unref = [=]{
                     if (auto sm = wm.lock()) {
-                        const lock_guard lock(*sm);
+                        const scoped_lock lock(*sm);
                         auto sp = wp.lock();
                         if (!sp || !*sp)
                             return;
@@ -724,7 +715,7 @@ void BRawReader::ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBl
     frame.setTimestamp(double(duration_ * index / frames_) / 1000.0);
     frame.setDuration((double)duration_/(double)frames_ / 1000.0);
 
-    const lock_guard lock(unload_mtx_);
+    const scoped_lock lock(unload_mtx_);
     // FIXME: stop playback in onFrame() callback results in dead lock in braw(FlushJobs will wait this function finished)
     if (seekId > 0) {
         frameAvailable(VideoFrame(fmt).setTimestamp(frame.timestamp()));
@@ -929,12 +920,6 @@ void BRawReader::onPropertyChanged(const std::string& key, const std::string& va
     case "decoder"_svh:
     case "video.decoder"_svh:
         parse(val.data());
-        return;
-    case "error"_svh: {
-        max_err_ = stoi(val);
-        if (max_err_ < 0)
-            max_err_ = INT_MAX;
-    }
         return;
     }
     // TODO: if property is a clip attribute and exists, guess VARIANT then SetClipAttribute(). if not exist, insert only
