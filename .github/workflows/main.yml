@@ -28,14 +28,14 @@ jobs:
       #
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-2025-vs2026, macos-latest]
         include:
           - os: ubuntu-latest
             artifact: linux-MinSizeRel
             sdk: linux-x64.tar.xz
-          - os: windows-latest
-            artifact: vs2022-windows-desktop-RelWithDebInfo
-            sdk: windows-desktop-vs2022.7z
+          - os: windows-2025-vs2026
+            artifact: vs2026-windows-desktop-RelWithDebInfo
+            sdk: windows-desktop-vs2026.7z
           - os: macos-latest
             artifact: macOS
             sdk: macOS.tar.xz
@@ -83,7 +83,7 @@ jobs:
 
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: ilammy/msvc-dev-cmd@v1
-      if: matrix.os == 'windows-latest'
+      if: matrix.os == 'windows-2025-vs2026'
       with:
         arch: x64
     - name: Configure CMake
