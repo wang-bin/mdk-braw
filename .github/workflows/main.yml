@@ -34,8 +34,8 @@ jobs:
             artifact: linux-MinSizeRel
             sdk: linux-x64.tar.xz
           - os: windows-2025-vs2026
-            artifact: vs2026-windows-desktop-RelWithDebInfo
-            sdk: windows-desktop-vs2026.7z
+            artifact: windows-vs2026-RelWithDebInfo
+            sdk: windows-vs2026.7z
           - os: macos-latest
             artifact: macOS
             sdk: macOS.tar.xz
