@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2026 WangBin <wbsecg1 at gmail.com>
  */
 
 #include "BlackmagicRawAPI.h"
@@ -50,7 +50,7 @@ using namespace std;
 #define BRAW_API_EXPAND_T_V(R, F, ARG_T, ARG_T_V, ARG_V) \
     R F ARG_T_V { \
         static auto fp = (decltype(&(F)))dlsym(load_once(), #F); \
-        if (!fp) \
+        if (!fp) [[unlikely]] \
             return default_rv<R>(); \
         return fp ARG_V; \
     }

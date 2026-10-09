@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025 WangBin <wbsecg1 at gmail.com>
+ * Copyright (c) 2022-2026 WangBin <wbsecg1 at gmail.com>
  * braw plugin for libmdk
  */
 // TODO: set frame attributes, read current index with attributes applied. AttrName.Range/List/ReadOnly. use forcc as name?
@@ -54,6 +54,9 @@ public:
 
     // IBlackmagicRawCallback
     void ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlackmagicRawFrame* frame) override;
+#if (BRAW_VERSION + 0) >= 600
+    virtual void ReadAudioComplete (/* in */ IBlackmagicRawJob* job, /* in */ HRESULT result, /* in */ IBlackmagicRawAudioBuffer* audioBuffer) override {} // TODO:
+#endif
     void ProcessComplete(IBlackmagicRawJob* procJob, HRESULT result, IBlackmagicRawProcessedImage* processedImage) override;
     void DecodeComplete(IBlackmagicRawJob*, HRESULT) override {}
     void TrimProgress(IBlackmagicRawJob*, float info) override {}
