@@ -28,14 +28,8 @@
 #ifndef BMD_BLACKMAGICRAWAPI_H
 #define BMD_BLACKMAGICRAWAPI_H
 
-#if (_WIN32 + 0) && ((__aarch64__+0) || /*vc*/defined(_M_ARM64))
-# define BRAW_VERSION_MIN 600
-#else
-# define BRAW_VERSION_MIN 450
-#endif
-
 #ifndef BRAW_VERSION
-# define BRAW_VERSION BRAW_VERSION_MIN // 100*major + 10*minor
+# define BRAW_VERSION 600 // 100*major + 10*minor. sdk 6.0 does not support old interfaces. sdk 4.5 supports 3.x
 #endif // BRAW_VERSION
 #define BRAW_MAJOR (BRAW_VERSION / 100)
 
